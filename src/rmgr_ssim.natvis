@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" MenuName="Add to Image Watch"/>
+
+	<Type Name="rmgr::ssim::Image">
+		<UIVisualizer ServiceId="{A452AFEA-3DF6-46BB-9177-C0B08F318025}" Id="1" />
+	</Type>
+
+
+	<Type Name="rmgr::ssim::Image">
+		<Expand>
+			<Synthetic Name="[type]">
+				<DisplayString>FLOAT32</DisplayString>
+			</Synthetic>
+			<Synthetic Name="[channels]">
+				<DisplayString>1</DisplayString>
+			</Synthetic>
+			<!--
+			<Item Name="[width]">m_width + 2*m_margin</Item>
+			<Item Name="[height]">m_height + 2*m_margin</Item>
+			<Item Name="[data]">m_buffer</Item>
+			<Item Name="[stride]">m_stride*sizeof(float)</Item>
+			-->
+			<Item Name="[width]">m_width</Item>
+			<Item Name="[height]">m_height</Item>
+			<Item Name="[data]">m_buffer + (m_margin * m_stride) + m_margin</Item>
+			<Item Name="[stride]">m_stride*sizeof(float)</Item>
+		</Expand>
+	</Type>
+</AutoVisualizer>

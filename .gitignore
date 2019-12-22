@@ -1,0 +1,7 @@
+bin
+build
+CoverageReport-*
+doc
+lib
+tests/gtest
+tests/stb_image.h

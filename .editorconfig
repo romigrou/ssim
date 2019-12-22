@@ -1,0 +1,19 @@
+root = true
+
+[*]
+indent_style = space
+tab_width    = 4
+indent_size  = 4
+end_of_line  = crlf
+charset      = latin1
+trim_trailing_whitespace = true
+insert_final_newline     = true
+
+[makefile,Makefile,GNUmakefile]
+indent_style = tab
+
+[*.natvis]
+indent_style = tab
+
+[*.in]
+trim_trailing_whitespace = false
