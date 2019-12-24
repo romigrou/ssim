@@ -615,11 +615,11 @@ float compute_ssim(uint32_t width, uint32_t height,
 
     // Apply Gaussian blur to all above images
     Image muAImg, muBImg, sigmaA2Img, sigmaB2Img, sigmaABImg;
-    CHECK(gaussian_blur(muAImg,     a,  kernel, radius));
-    CHECK(gaussian_blur(muBImg,     b,  kernel, radius));
-    CHECK(gaussian_blur(sigmaA2Img, a2, kernel, radius));
-    CHECK(gaussian_blur(sigmaB2Img, b2, kernel, radius));
-    CHECK(gaussian_blur(sigmaABImg, ab, kernel, radius));
+    CHECK(gaussian_blur(muAImg,     a,  kernel, radius));   a.release();
+    CHECK(gaussian_blur(muBImg,     b,  kernel, radius));   b.release();
+    CHECK(gaussian_blur(sigmaA2Img, a2, kernel, radius));   a2.release();
+    CHECK(gaussian_blur(sigmaB2Img, b2, kernel, radius));   b2.release();
+    CHECK(gaussian_blur(sigmaABImg, ab, kernel, radius));   ab.release();
 
     double sum = 0.0f;
     for (uint32_t y=0; y<height; ++y)
