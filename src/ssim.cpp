@@ -390,21 +390,25 @@ int gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_
     assert(height > 0);
     assert(srceStride >= destStride + 2*radius);
 
+    const int32_t kernelStride = 2*radius + 1;
     for (int32_t yd=0; yd<height; ++yd)
     {
-        for (int32_t xd=0; xd<width; ++xd)
+        memset(dest, 0, width*sizeof(Float));
+        for (int32_t yk=-radius; yk<=radius; ++yk)
         {
-            Float val = 0;
-            const Float* k = kernel;
-            for (int32_t ys=yd-radius; ys<=yd+radius; ++ys)
+            const Float* kernelRow = kernel + yk * kernelStride;
+            for (int32_t xk=-radius; xk<=radius; ++xk)
             {
-                const Float* row = srce + ys * srceStride;
-                for (int32_t xs=xd-radius; xs<=xd+radius; ++xs)
-                    val += *k++ * row[xs];
+                const Float  k = kernelRow[xk];
+                const Float* s = srce + (yd+yk) * srceStride + xk;
+                Float*       d = dest;
+
+                for (int32_t xd=0; xd<width; ++xd)
+                    *d++ += *s++ * k;
             }
-            *dest++ = val;
         }
-        dest += destStride - width;
+
+        dest += destStride;
     }
 
     return 0;
@@ -505,10 +509,12 @@ float compute_ssim(uint32_t width, uint32_t height,
     // Parameters of the gaussian blur
     const unsigned radius = 5;
     const Float    sigma  = 1.5;
-    Float kernel[(2*radius+1) * (2*radius+1)];
-    precompute_gaussian_kernel(kernel, radius, sigma);
+    Float kernelBuffer[(2*radius+1) * (2*radius+1)];
+    precompute_gaussian_kernel(kernelBuffer, radius, sigma);
 
 #if 1
+    const Float* kernel = kernelBuffer + radius * (2*radius+1) + radius; // Center of the kernel
+
     const uint32_t tileSize   = 64;
     const uint32_t tileStride = tileSize + 2 *radius;
 
@@ -615,11 +621,11 @@ float compute_ssim(uint32_t width, uint32_t height,
 
     // Apply Gaussian blur to all above images
     Image muAImg, muBImg, sigmaA2Img, sigmaB2Img, sigmaABImg;
-    CHECK(gaussian_blur(muAImg,     a,  kernel, radius));   a.release();
-    CHECK(gaussian_blur(muBImg,     b,  kernel, radius));   b.release();
-    CHECK(gaussian_blur(sigmaA2Img, a2, kernel, radius));   a2.release();
-    CHECK(gaussian_blur(sigmaB2Img, b2, kernel, radius));   b2.release();
-    CHECK(gaussian_blur(sigmaABImg, ab, kernel, radius));   ab.release();
+    CHECK(gaussian_blur(muAImg,     a,  kernelBuffer, radius));   a.release();
+    CHECK(gaussian_blur(muBImg,     b,  kernelBuffer, radius));   b.release();
+    CHECK(gaussian_blur(sigmaA2Img, a2, kernelBuffer, radius));   a2.release();
+    CHECK(gaussian_blur(sigmaB2Img, b2, kernelBuffer, radius));   b2.release();
+    CHECK(gaussian_blur(sigmaABImg, ab, kernelBuffer, radius));   ab.release();
 
     double sum = 0.0f;
     for (uint32_t y=0; y<height; ++y)
