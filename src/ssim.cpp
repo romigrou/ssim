@@ -19,6 +19,7 @@
  */
 
 #include <rmgr/ssim.h>
+#include <algorithm>
 #include <cassert>
 #include <cerrno>
 #include <cmath>
@@ -31,6 +32,11 @@
     #else
         #define RMGR_SSIM_REPORT_ERROR(...)
     #endif
+#endif
+
+
+#ifndef RMGR_SSIM_TILE_ALIGNMENT
+    #define RMGR_SSIM_TILE_ALIGNMENT  64
 #endif
 
 
@@ -284,6 +290,22 @@ static int multiply(Image& product, const Image& a, const Image& b) RMGR_NOEXCEP
 }
 
 
+/**
+ * @brief Multiplies a tile by another tile
+ */
+static void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride) RMGR_NOEXCEPT
+{
+    for (uint32_t y=0; y<height; ++y)
+    {
+        for (uint32_t x=0; x<width; ++x)
+            *product++ = *a++ * *b++;
+        a       += stride - width;
+        b       += stride - width;
+        product += stride - width;
+    }
+}
+
+
 static inline Float gaussian_kernel(int x, int y, Float sigma) RMGR_NOEXCEPT
 {
     Float sigma2      = sigma * sigma;
@@ -362,9 +384,104 @@ static int gaussian_blur(Image& dest, const Image& srce, const Float kernel[], i
 }
 
 
+int gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
+{
+    assert(width  > 0);
+    assert(height > 0);
+    assert(srceStride >= destStride + 2*radius);
+
+    for (int32_t yd=0; yd<height; ++yd)
+    {
+        for (int32_t xd=0; xd<width; ++xd)
+        {
+            Float val = 0;
+            const Float* k = kernel;
+            for (int32_t ys=yd-radius; ys<=yd+radius; ++ys)
+            {
+                const Float* row = srce + ys * srceStride;
+                for (int32_t xs=xd-radius; xs<=xd+radius; ++xs)
+                    val += *k++ * row[xs];
+            }
+            *dest++ = val;
+        }
+        dest += destStride - width;
+    }
+
+    return 0;
+}
+
+
+static void retrieve_tile(Float* tile, uint32_t tileWidth, uint32_t tileHeight, size_t tileStride, uint32_t margin, uint32_t x, uint32_t y,
+                          const uint8_t* imgData, uint32_t imgWidth, uint32_t imgHeight, ptrdiff_t imgStep, ptrdiff_t imgStride) RMGR_NOEXCEPT
+{
+    assert(tileStride >= tileWidth + 2*margin);
+    assert(0<=x && x<imgWidth);
+    assert(0<=y && y<imgHeight);
+
+    const int32_t dx1 = x - margin;
+    const int32_t dy1 = y - margin;
+    const int32_t dx2 = x + tileWidth  + margin;
+    const int32_t dy2 = y + tileHeight + margin;
+    const int32_t sx1 = std::max(dx1, 0);
+    const int32_t sy1 = std::max(dy1, 0);
+    const int32_t sx2 = std::min(dx2, int32_t(imgWidth));
+    const int32_t sy2 = std::min(dy2, int32_t(imgHeight));
+
+    const uint8_t* s       = imgData + sx1 * imgStep + sy1 * imgStride;
+    Float*         d       = tile + tileStride * (sy1 - dy1);
+    const size_t   sStride = imgStride  - imgStep * (sx2 - sx1);
+    const size_t   dStride = tileStride - (tileWidth + 2*margin);
+    for (int32_t dy=sy1; dy<sy2; ++dy)
+    {
+        // Left margin
+        for (int32_t dx=dx1; dx<sx1; ++dx)
+            *d++ = Float(*s);
+
+        // Actual data
+        for (int32_t dx=sx1; dx<sx2; ++dx)
+        {
+            *d++ = Float(*s);
+            s += imgStep;
+        }
+
+        // Right margin
+        const Float right = d[-1];
+        for (int32_t dx=sx2; dx<dx2; ++dx)
+            *d++ = right;
+
+        s += sStride;
+        d += dStride;
+    }
+
+    // Bottom margin
+    const size_t tileRowSize = (tileWidth + 2*margin) * sizeof(Float);
+    if (dy2 > sy2)
+    {
+        Float* lastRow = d - tileStride;
+        for (int32_t dy=sy2; dy<dy2; ++dy)
+        {
+            memcpy(d, lastRow, tileRowSize);
+            d += tileStride;
+        }
+    }
+
+    // Top margin
+    if (dy1 < sy1)
+    {
+        Float* firstRow = tile + tileStride * (sy1 - dy1);
+        d = tile;
+        for (int32_t dy=dy1; dy<sy1; ++dy)
+        {
+            memcpy(d , firstRow, tileRowSize);
+            d += tileStride;
+        }
+    }
+}
+
+
 float compute_ssim(uint32_t width, uint32_t height,
-                   const uint8_t* img1Data, ptrdiff_t img1Step, ptrdiff_t img1Stride,
-                   const uint8_t* img2Data, ptrdiff_t img2Step, ptrdiff_t img2Stride,
+                   const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
+                   const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
                    float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
     const Float k1 = Float(0.01);
@@ -373,9 +490,9 @@ float compute_ssim(uint32_t width, uint32_t height,
     const Float c1 = (k1 * L) * (k1 * L);
     const Float c2 = (k2 * L) * (k2 * L);
 
-    if (img1Data==NULL || img2Data==NULL)
+    if (imgAData==NULL || imgBData==NULL)
     {
-        RMGR_SSIM_REPORT_ERROR("Invalid parameter: img1Data or img2Data is NULL\n");
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: imgAData or imgBData is NULL\n");
         return -EINVAL;
     }
 
@@ -388,15 +505,106 @@ float compute_ssim(uint32_t width, uint32_t height,
     // Parameters of the gaussian blur
     const unsigned radius = 5;
     const Float    sigma  = 1.5;
+    Float kernel[(2*radius+1) * (2*radius+1)];
+    precompute_gaussian_kernel(kernel, radius, sigma);
+
+#if 1
+    const uint32_t tileSize   = 64;
+    const uint32_t tileStride = tileSize + 2 *radius;
+
+    double sum = 0.0;
+    for (uint32_t ty=0; ty<height; ty+=tileSize)
+    {
+        const uint32_t th = std::min(tileSize, height-ty);
+        for (uint32_t tx=0; tx<width; tx+=tileSize)
+        {
+            const uint32_t tw = std::min(tileSize, width-tx);
+
+            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer1[tileSize   * tileSize];   // Yes, this one needs not be as large as the other ones
+            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer2[tileStride * tileStride];
+            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer3[tileStride * tileStride];
+            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer4[tileStride * tileStride];
+            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer5[tileStride * tileStride];
+            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer6[tileStride * tileStride];
+
+            Float* a = buffer2;
+            Float* b = buffer3;
+            retrieve_tile(a, tw, th, tileStride, radius, tx, ty, imgAData, width, height, imgAStep, imgAStride);
+            retrieve_tile(b, tw, th, tileStride, radius, tx, ty, imgBData, width, height, imgBStep, imgBStride);
+
+            Float* a2 = buffer4;
+            Float* b2 = buffer5;
+            Float* ab = buffer6;
+            multiply(a2, a, a, tw+2*radius, th+2*radius, tileStride);
+            multiply(b2, b, b, tw+2*radius, th+2*radius, tileStride);
+            multiply(ab, a, b, tw+2*radius, th+2*radius, tileStride);
+
+            Float* muATile     = buffer1;
+            Float* muBTile     = buffer2;
+            Float* sigmaA2Tile = buffer3;
+            Float* sigmaB2Tile = buffer4;
+            Float* sigmaABTile = buffer5;
+            gaussian_blur(muATile,     tileSize, a  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussian_blur(muBTile,     tileSize, b  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussian_blur(sigmaA2Tile, tileSize, a2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussian_blur(sigmaB2Tile, tileSize, b2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussian_blur(sigmaABTile, tileSize, ab + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+
+            float* ssimTile = ssimMap + tx * ssimStep + ty * ssimStride;
+
+            double tileSum = 0.0f;
+            for (uint32_t y=0; y<th; ++y)
+            {
+                const Float* muARow     = muATile     + y * tileSize;
+                const Float* muBRow     = muBTile     + y * tileSize;
+                const Float* sigmaA2Row = sigmaA2Tile + y * tileSize;
+                const Float* sigmaB2Row = sigmaB2Tile + y * tileSize;
+                const Float* sigmaABRow = sigmaABTile + y * tileSize;
+                float*       ssimPtr    = ssimTile    + y * ssimStride;
+                for (uint32_t x=0; x<tw; ++x)
+                {
+                    const double muA     = muARow[x];
+                    const double muB     = muBRow[x];
+                    const double muA2    = muA * muA;
+                    const double muB2    = muB * muB;
+                    const double muAB    = muA * muB;
+                    const double sigmaA2 = sigmaA2Row[x] - muA2;
+                    const double sigmaB2 = sigmaB2Row[x] - muB2;
+                    const double sigmaAB = sigmaABRow[x] - muAB;
+
+                    const double numerator1   = 2 * muAB    + c1;
+                    const double numerator2   = 2 * sigmaAB + c2;
+                    const double denominator1 = muA2 + muB2 + c1;
+                    const double denominator2 = sigmaA2 + sigmaB2 + c2;
+
+                    const double numerator   = numerator1 * numerator2;
+                    const double denominator = denominator1 * denominator2;
+
+                    const double ssim = numerator / denominator;
+                    tileSum += ssim;
+
+                    if (ssimMap != NULL)
+                    {
+                        *ssimPtr = float(ssim);
+                        ssimPtr += ssimStep;
+                    }
+                }
+            }
+
+            sum += tileSum;
+        }
+    }
+
+#else
 
     int err;
     #define CHECK(exp) if ((err = exp) != 0) return float(err)
 
     // Convert images to float
     Image a, b;
-    if ((err = a.init(img1Data, width, height, img1Step, img1Stride, radius)) != 0)
+    if ((err = a.init(imgAData, width, height, imgAStep, imgAStride, radius)) != 0)
         return float(err);
-    if ((err = b.init(img2Data, width, height, img2Step, img2Stride, radius)) != 0)
+    if ((err = b.init(imgBData, width, height, imgBStep, imgBStride, radius)) != 0)
         return float(err);
 
     // Multiply them
@@ -406,8 +614,6 @@ float compute_ssim(uint32_t width, uint32_t height,
     CHECK(multiply(ab, a, b));
 
     // Apply Gaussian blur to all above images
-    Float kernel[(2*radius+1) * (2*radius+1)];
-    precompute_gaussian_kernel(kernel, radius, sigma);
     Image muAImg, muBImg, sigmaA2Img, sigmaB2Img, sigmaABImg;
     CHECK(gaussian_blur(muAImg,     a,  kernel, radius));
     CHECK(gaussian_blur(muBImg,     b,  kernel, radius));
@@ -448,6 +654,7 @@ float compute_ssim(uint32_t width, uint32_t height,
         }
         ssimMap += ssimStride - int32_t(width) * ssimStep;
     }
+#endif
 
     return float(sum / double(width * height));
 }

@@ -114,6 +114,9 @@
         #define RMGR_WARNING_GCC_DO_DISABLE(string)  _Pragma(#string)
         #define RMGR_WARNING_GCC_DISABLE(name)       RMGR_WARNING_GCC_DO_DISABLE(GCC diagnostic ignored name)
     #endif
+    #ifndef RMGR_ALIGNED
+        #define RMGR_ALIGNED(alignment)      __attribute__((aligned(alignment)))
+    #endif
 #endif
 
 #ifndef RMGR_COMPILER_IS_DOXYGEN
@@ -352,15 +355,15 @@ int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
  *
  * @param [in]  width      The images' width,  in pixels
  * @param [in]  height     The images' height, in pixels
- * @param [in]  img1Data   A pointer to the considered channel of the top-left pixel of the 1st image's data
- * @param [in]  img1Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 1st image.
+ * @param [in]  imgAData   A pointer to the considered channel of the top-left pixel of image A.
+ * @param [in]  imgAStep   For image A, the distance (in bytes) between a pixel and the one immediately to its right.
  *                         This distance may be negative.
- * @param [in]  img1Stride The distance (in bytes) between a pixel and the one immediately below it, for the 1st image.
+ * @param [in]  imgAStride For image A, the distance (in bytes) between a pixel and the one immediately below it.
  *                         This distance may be negative.
- * @param [in]  img2Data   A pointer to the 1st channel of the top-left pixel of the 2nd image's data
- * @param [in]  img2Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 2nd image.
+ * @param [in]  imgBData   A pointer to the considered channel of the top-left pixel of image B.
+ * @param [in]  imgBStep   For image B, the distance (in bytes) between a pixel and the one immediately to its right.
  *                         This distance may be negative.
- * @param [in]  img2Stride The distance (in bytes) between a pixel and the one immediately below it, for the 2nd image.
+ * @param [in]  imgBStride For image B, the distance (in bytes) between a pixel and the one immediately below it.
  *                         This distance may be negative.
  * @param [out] ssimMap    A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need
  *                         the SSIM map, in which case the `ssimStep` and `ssimStride` parameters will be ignored.
@@ -373,8 +376,8 @@ int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
  */
 float compute_ssim(uint32_t width, uint32_t height,
-                   const uint8_t* img1Data, ptrdiff_t img1Step, ptrdiff_t img1Stride,
-                   const uint8_t* img2Data, ptrdiff_t img2Step, ptrdiff_t img2Stride,
+                   const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
+                   const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
                    float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT;
 
 
@@ -391,25 +394,25 @@ float compute_ssim(uint32_t width, uint32_t height,
  *
  * @param [in] width      The images' width,  in pixels
  * @param [in] height     The images' height, in pixels
- * @param [in] img1Data   A pointer to the considered channel of the top-left pixel of the 1st image's data
- * @param [in] img1Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 1st image.
+ * @param [in] imgAData   A pointer to the considered channel of the top-left pixel of image A.
+ * @param [in] imgAStep   For image A, the distance (in bytes) between a pixel and the one immediately to its right.
  *                        This distance may be negative.
- * @param [in] img1Stride The distance (in bytes) between a pixel and the one immediately below it, for the 1st image.
+ * @param [in] imgAStride For image A, the distance (in bytes) between a pixel and the one immediately below it.
  *                        This distance may be negative.
- * @param [in] img2Data   A pointer to the 1st channel of the top-left pixel of the 2nd image's data
- * @param [in] img2Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 2nd image.
+ * @param [in] imgBData   A pointer to the considered channel of the top-left pixel of image B.
+ * @param [in] imgBStep   For image B, the distance (in bytes) between a pixel and the one immediately to its right.
  *                        This distance may be negative.
- * @param [in] img2Stride The distance (in bytes) between a pixel and the one immediately below it, for the 2nd image.
+ * @param [in] imgBStride For image B, the distance (in bytes) between a pixel and the one immediately below it.
  *                        This distance may be negative.
  *
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
  */
 inline float compute_ssim(uint32_t width, uint32_t height,
-                          const uint8_t* img1Data, ptrdiff_t img1Step, ptrdiff_t img1Stride,
-                          const uint8_t* img2Data, ptrdiff_t img2Step, ptrdiff_t img2Stride) RMGR_NOEXCEPT
+                          const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
+                          const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride) RMGR_NOEXCEPT
 {
-    return compute_ssim(width, height, img1Data, img1Step, img1Stride, img2Data, img2Step, img2Stride, NULL, 0, 0);
+    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, NULL, 0, 0);
 }
 
 
