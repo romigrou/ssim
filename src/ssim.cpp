@@ -19,6 +19,7 @@
  */
 
 #include <rmgr/ssim.h>
+#include "ssim_simd.h"
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
@@ -384,7 +385,7 @@ static int gaussian_blur(Image& dest, const Image& srce, const Float kernel[], i
 }
 
 
-int gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
+void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
 {
     assert(width  > 0);
     assert(height > 0);
@@ -410,8 +411,6 @@ int gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_
 
         dest += destStride;
     }
-
-    return 0;
 }
 
 
@@ -483,11 +482,76 @@ static void retrieve_tile(Float* tile, uint32_t tileWidth, uint32_t tileHeight, 
 }
 
 
+volatile GaussianBlurFct g_gaussianBlurFct = NULL;
+
+
+//=================================================================================================
+// x86 init
+
+#if RMGR_ARCH_IS_X86_ANY
+
+
+
+#ifdef _MSC_VER
+    #include <intrin.h>
+    static inline void CpuId(int leaf, int regs[4]) noexcept
+    {
+        __cpuid(regs, leaf);
+    }
+#else
+    #include <cpuid.h>
+    static inline void CpuId(int leaf, int regs[4]) noexcept
+    {
+        __get_cpuid(leaf, reinterpret_cast<unsigned*>(regs), reinterpret_cast<unsigned*>(regs+1), reinterpret_cast<unsigned*>(regs+2), reinterpret_cast<unsigned*>(regs+3));
+    }
+#endif
+
+
+static void init_x86()
+{
+    // Detect machine's features
+    int regs[4] = {};
+    CpuId(0, regs);
+    const uint32_t maxLeaf = regs[0];
+    if (maxLeaf >= 1)
+    {
+        CpuId(1, regs);
+        const uint32_t ecx = regs[2];
+        const uint32_t edx = regs[3];
+
+        if ((ecx & (1 << 28))!=0 && avx::g_gaussianBlurFct!=NULL)
+            g_gaussianBlurFct = avx::g_gaussianBlurFct;
+        else if ((edx & (1 << 25))!=0 && sse::g_gaussianBlurFct!=NULL)
+            g_gaussianBlurFct = sse::g_gaussianBlurFct;
+        else
+            g_gaussianBlurFct = gaussian_blur;
+    }
+}
+
+    
+
+#endif // RMGR_ARCH_IS_X86_ANY
+
+
+//=================================================================================================
+// Main function
+
 float compute_ssim(uint32_t width, uint32_t height,
                    const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
                    const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
                    float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
+    GaussianBlurFct gaussianBlur = g_gaussianBlurFct;
+    if (gaussianBlur == NULL)
+    {
+#if RMGR_ARCH_IS_X86_ANY
+        init_x86();
+#else
+        g_gaussianBlurFct = gaussian_blur;
+#endif
+        gaussianBlur = g_gaussianBlurFct;
+    }
+
     const Float k1 = Float(0.01);
     const Float k2 = Float(0.03);
     const Float L  = UINT8_MAX;
@@ -550,11 +614,11 @@ float compute_ssim(uint32_t width, uint32_t height,
             Float* sigmaA2Tile = buffer3;
             Float* sigmaB2Tile = buffer4;
             Float* sigmaABTile = buffer5;
-            gaussian_blur(muATile,     tileSize, a  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussian_blur(muBTile,     tileSize, b  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussian_blur(sigmaA2Tile, tileSize, a2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussian_blur(sigmaB2Tile, tileSize, b2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussian_blur(sigmaABTile, tileSize, ab + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussianBlur(muATile,     tileSize, a  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussianBlur(muBTile,     tileSize, b  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussianBlur(sigmaA2Tile, tileSize, a2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussianBlur(sigmaB2Tile, tileSize, b2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussianBlur(sigmaABTile, tileSize, ab + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
 
             float* ssimTile = ssimMap + tx * ssimStep + ty * ssimStride;
 
