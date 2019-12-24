@@ -34,7 +34,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, const float exp
 
     for (int channel=0; channel<refChannels; ++channel)
     {
-        float ssim = rmgr::ssim::compute_ssim(refWidth, refHeight, refData, channel, refChannels, refWidth*refChannels, imgData, channel, imgChannels, imgWidth*imgChannels);
+        float ssim = rmgr::ssim::compute_ssim(refWidth, refHeight, refData+channel, refChannels, refWidth*refChannels, imgData+channel, imgChannels, imgWidth*imgChannels);
         EXPECT_NEAR(expectedSSIMs[channel], ssim, tolerance);
     }
 

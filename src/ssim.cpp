@@ -171,7 +171,7 @@ public:
     }
 
 
-    int init(const uint8_t* data, uint32_t width, uint32_t height, uint32_t channelNum, ptrdiff_t step, ptrdiff_t stride, uint32_t margin=0) RMGR_NOEXCEPT
+    int init(const uint8_t* data, uint32_t width, uint32_t height, ptrdiff_t step, ptrdiff_t stride, uint32_t margin=0) RMGR_NOEXCEPT
     {
         release();
 
@@ -190,7 +190,7 @@ public:
         m_stride = bufStride;
         m_margin = margin;
 
-        const uint8_t* s = data + channelNum;
+        const uint8_t* s = data;
         Float*         d = m_buffer + (margin * m_stride);
         const size_t   sStride = stride - step * width;
         const size_t   dStride = bufStride - actualWidth;
@@ -363,8 +363,9 @@ static int gaussian_blur(Image& dest, const Image& srce, const Float kernel[], i
 
 
 float compute_ssim(uint32_t width, uint32_t height,
-                   const uint8_t* img1Data, uint32_t img1ChannelNum, ptrdiff_t img1Step, ptrdiff_t img1Stride,
-                   const uint8_t* img2Data, uint32_t img2ChannelNum, ptrdiff_t img2Step, ptrdiff_t img2Stride) RMGR_NOEXCEPT
+                   const uint8_t* img1Data, ptrdiff_t img1Step, ptrdiff_t img1Stride,
+                   const uint8_t* img2Data, ptrdiff_t img2Step, ptrdiff_t img2Stride,
+                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
     const Float k1 = Float(0.01);
     const Float k2 = Float(0.03);
@@ -378,6 +379,12 @@ float compute_ssim(uint32_t width, uint32_t height,
         return -EINVAL;
     }
 
+    if (ssimMap == NULL)
+    {
+        ssimStep   = 0;
+        ssimStride = 0;
+    }
+
     // Parameters of the gaussian blur
     const unsigned radius = 5;
     const Float    sigma  = 1.5;
@@ -387,9 +394,9 @@ float compute_ssim(uint32_t width, uint32_t height,
 
     // Convert images to float
     Image a, b;
-    if ((err = a.init(img1Data, width, height, img1ChannelNum, img1Step, img1Stride, radius)) != 0)
+    if ((err = a.init(img1Data, width, height, img1Step, img1Stride, radius)) != 0)
         return float(err);
-    if ((err = b.init(img2Data, width, height, img2ChannelNum, img2Step, img2Stride, radius)) != 0)
+    if ((err = b.init(img2Data, width, height, img2Step, img2Stride, radius)) != 0)
         return float(err);
 
     // Multiply them
@@ -407,9 +414,6 @@ float compute_ssim(uint32_t width, uint32_t height,
     CHECK(gaussian_blur(sigmaA2Img, a2, kernel, radius));
     CHECK(gaussian_blur(sigmaB2Img, b2, kernel, radius));
     CHECK(gaussian_blur(sigmaABImg, ab, kernel, radius));
-
-    Image ssimMap;
-    CHECK(ssimMap.init(width, height));
 
     double sum = 0.0f;
     for (uint32_t y=0; y<height; ++y)
@@ -434,9 +438,15 @@ float compute_ssim(uint32_t width, uint32_t height,
             const double denominator = denominator1 * denominator2;
 
             const double ssim = numerator / denominator;
-            ssimMap[y][x] = Float(ssim);
             sum += ssim;
+
+            if (ssimMap != NULL)
+            {
+                *ssimMap = Float(ssim);
+                ssimMap += ssimStep;
+            }
         }
+        ssimMap += ssimStride - int32_t(width) * ssimStep;
     }
 
     return float(sum / double(width * height));

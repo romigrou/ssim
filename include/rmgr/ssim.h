@@ -342,34 +342,75 @@ int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
 /**
  * @brief Computes the SSIM of a single channel of two images
  *
- * An image is assumed to contain an undefined number of interleaved channels. However, no other assumption
- * is made as to the actual storage of an image, it can be stored in row-major or column-major order
- * and in top-down or bottom-up order. The `step` and `stride` parameters can be adjusted to deal with any
- * setup.
+ * This function can handle almost any kind of image storage scheme (interleaved or planar, top-down or
+ * bottom-up, row-major or column-major, ...). All you need is to specify the `step` and `stride` parameters
+ * such that the address of a pixel's channel is given by `imgData + x * imgStep + y * imgStride` with `x` and
+ * `y` being the horizontal and vertical coordinates, respectively.
  *
- * Planar images can be handled simply by considering each plane as a single-channel image.
+ * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the `step` and `stride`
+ *       parameters if this improves cache hit rates, as long as both images are traversed in the same order.
  *
- * @param [in] width          The images' width,  in pixels
- * @param [in] height         The images' height, in pixels
- * @param [in] img1Data       A pointer to the 1st channel of the top-left pixel of the 1st image's data
- * @param [in] img1ChannelNum The number of the channel to consider in the 1st image
- * @param [in] img1Step       The distance (in bytes) between a pixel and its right neighbour for the 1st image.
- *                            This distance may be negative.
- * @param [in] img1Stride     The distance (in bytes) between a row and the one below it for the 1st image
- *                            This distance may be negative.
- * @param [in] img2Data       A pointer to the 1st channel of the top-left pixel of the 2nd image's data
- * @param [in] img2ChannelNum The number of the channel to consider in the 2nd image
- * @param [in] img2Step       The distance (in bytes) between a pixel and its right neighbour for the 2nd image.
- *                            This distance may be negative.
- * @param [in] img2Stride     The distance (in bytes) between a row and the one below it for the 2nd image
- *                            This distance may be negative.
+ * @param [in]  width      The images' width,  in pixels
+ * @param [in]  height     The images' height, in pixels
+ * @param [in]  img1Data   A pointer to the considered channel of the top-left pixel of the 1st image's data
+ * @param [in]  img1Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 1st image.
+ *                         This distance may be negative.
+ * @param [in]  img1Stride The distance (in bytes) between a pixel and the one immediately below it, for the 1st image.
+ *                         This distance may be negative.
+ * @param [in]  img2Data   A pointer to the 1st channel of the top-left pixel of the 2nd image's data
+ * @param [in]  img2Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 2nd image.
+ *                         This distance may be negative.
+ * @param [in]  img2Stride The distance (in bytes) between a pixel and the one immediately below it, for the 2nd image.
+ *                         This distance may be negative.
+ * @param [out] ssimMap    A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need
+ *                         the SSIM map, in which case the `ssimStep` and `ssimStride` parameters will be ignored.
+ * @param [in]  ssimStep   The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately to its right.
+ *                         This distance may be negative.
+ * @param [in]  ssimStride The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately below it.
+ *                         This distance may be negative.
  *
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
  */
 float compute_ssim(uint32_t width, uint32_t height,
-                   const uint8_t* img1Data, uint32_t img1ChannelNum, ptrdiff_t img1Step, ptrdiff_t img1Stride,
-                   const uint8_t* img2Data, uint32_t img2ChannelNum, ptrdiff_t img2Step, ptrdiff_t img2Stride) RMGR_NOEXCEPT;
+                   const uint8_t* img1Data, ptrdiff_t img1Step, ptrdiff_t img1Stride,
+                   const uint8_t* img2Data, ptrdiff_t img2Step, ptrdiff_t img2Stride,
+                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT;
+
+
+/**
+ * @brief Computes the SSIM of a single channel of two images
+ *
+ * This function can handle almost any kind of image storage scheme (interleaved or planar, top-down or
+ * bottom-up, row-major or column-major, ...). All you need is to specify the `step` and `stride` parameters
+ * such that the address of a pixel's channel is given by `imgData + x * imgStep + y * imgStride` with `x` and
+ * `y` being the horizontal and vertical coordinates, respectively.
+ *
+ * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the `step` and `stride`
+ *       parameters if this improves cache hit rates, as long as both images are traversed in the same order.
+ *
+ * @param [in] width      The images' width,  in pixels
+ * @param [in] height     The images' height, in pixels
+ * @param [in] img1Data   A pointer to the considered channel of the top-left pixel of the 1st image's data
+ * @param [in] img1Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 1st image.
+ *                        This distance may be negative.
+ * @param [in] img1Stride The distance (in bytes) between a pixel and the one immediately below it, for the 1st image.
+ *                        This distance may be negative.
+ * @param [in] img2Data   A pointer to the 1st channel of the top-left pixel of the 2nd image's data
+ * @param [in] img2Step   The distance (in bytes) between a pixel and the one immediately to its right, for the 2nd image.
+ *                        This distance may be negative.
+ * @param [in] img2Stride The distance (in bytes) between a pixel and the one immediately below it, for the 2nd image.
+ *                        This distance may be negative.
+ *
+ * @retval >=0 The image's SSIM, in the range [0;1].
+ * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
+ */
+inline float compute_ssim(uint32_t width, uint32_t height,
+                          const uint8_t* img1Data, ptrdiff_t img1Step, ptrdiff_t img1Stride,
+                          const uint8_t* img2Data, ptrdiff_t img2Step, ptrdiff_t img2Stride) RMGR_NOEXCEPT
+{
+    return compute_ssim(width, height, img1Data, img1Step, img1Stride, img2Data, img2Step, img2Stride, NULL, 0, 0);
+}
 
 
 /**
@@ -385,6 +426,5 @@ inline int get_errno(float ssim) RMGR_NOEXCEPT
 
 
 }} // namespace rmgr::ssim
-
 
 #endif // RMGR_SSIM_H
