@@ -142,155 +142,6 @@ static inline size_t align_up(size_t size, size_t alignment) RMGR_NOEXCEPT
 }
 
 
-class Image
-{
-public:
-    Image()  RMGR_NOEXCEPT: m_buffer(NULL) {}
-    ~Image() RMGR_NOEXCEPT {release();}
-
-    void release() RMGR_NOEXCEPT
-    {
-        dealloc(m_buffer);
-        m_buffer = NULL;
-    }
-
-
-    int init(uint32_t width, uint32_t height, uint32_t margin=0)
-    {
-        release();
-
-        const uint32_t actualWidth  = width  + 2 * margin;
-        const uint32_t actualHeight = height + 2 * margin;
-        const size_t   bufStride    = align_up(actualWidth*sizeof(Float), CACHE_ALIGNMENT) / sizeof(Float);
-        const size_t   bufSize      = bufStride * actualHeight * sizeof(Float);
-        m_buffer = static_cast<Float*>(alloc(bufSize, CACHE_ALIGNMENT));
-        if (m_buffer == NULL)
-        {
-            RMGR_SSIM_REPORT_ERROR("Allocation failure\n");
-            return -ENOMEM;
-        }
-        m_width  = width;
-        m_height = height;
-        m_stride = bufStride;
-        m_margin = margin;
-
-        return 0;
-    }
-
-
-    int init(const uint8_t* data, uint32_t width, uint32_t height, ptrdiff_t step, ptrdiff_t stride, uint32_t margin=0) RMGR_NOEXCEPT
-    {
-        release();
-
-        const uint32_t actualWidth  = width  + 2 * margin;
-        const uint32_t actualHeight = height + 2 * margin;
-        const size_t   bufStride    = align_up(actualWidth*sizeof(Float), CACHE_ALIGNMENT) / sizeof(Float);
-        const size_t   bufSize      = bufStride * actualHeight * sizeof(Float);
-        m_buffer = static_cast<Float*>(alloc(bufSize, CACHE_ALIGNMENT));
-        if (m_buffer == NULL)
-        {
-            RMGR_SSIM_REPORT_ERROR("Allocation failure\n");
-            return -ENOMEM;
-        }
-        m_width  = width;
-        m_height = height;
-        m_stride = bufStride;
-        m_margin = margin;
-
-        const uint8_t* s = data;
-        Float*         d = m_buffer + (margin * m_stride);
-        const size_t   sStride = stride - step * width;
-        const size_t   dStride = bufStride - actualWidth;
-        for (uint32_t y=0; y<height; ++y)
-        {
-            // Left margin
-            for (uint32_t x=0; x<margin; ++x)
-                *d++ = Float(*s);
-
-            // Actual data
-            for (uint32_t x=0; x<width; ++x)
-            {
-                *d++ = Float(*s);
-                s += step;
-            }
-
-            // Right margin
-            const Float right = d[-1];
-            for (uint32_t x=0; x<margin; ++x)
-                *d++ = right;
-
-            s += sStride;
-            d += dStride;
-        }
-
-        // Top and bottom margins
-        Float* firstRow = m_buffer + (margin * bufStride);
-        Float* lastRow  = d - bufStride;
-        for (uint32_t y=1; y<=margin; ++y)
-        {
-            memcpy(firstRow - y*bufStride, firstRow, actualWidth*sizeof(Float));
-            memcpy(lastRow  + y*bufStride, lastRow,  actualWidth*sizeof(Float));
-        }
-
-        return 0;
-    }
-
-    const Float* operator[](int32_t y) const RMGR_NOEXCEPT {assert(-int32_t(m_margin)<=y && y<int32_t(m_height+m_margin)); return m_buffer + (int32_t(y + m_margin) * ptrdiff_t(m_stride)) + m_margin;}
-    Float*       operator[](int32_t y)       RMGR_NOEXCEPT {assert(-int32_t(m_margin)<=y && y<int32_t(m_height+m_margin)); return m_buffer + (int32_t(y + m_margin) * ptrdiff_t(m_stride)) + m_margin;}
-
-    const Float* buffer() const RMGR_NOEXCEPT {return m_buffer;}
-    Float*       buffer()       RMGR_NOEXCEPT {return m_buffer;}
-    const Float* data()   const RMGR_NOEXCEPT {return m_buffer + (m_margin * m_stride) + m_margin;}
-    Float*       data()         RMGR_NOEXCEPT {return m_buffer + (m_margin * m_stride) + m_margin;}
-    uint32_t     width()  const RMGR_NOEXCEPT {return m_width;}
-    uint32_t     height() const RMGR_NOEXCEPT {return m_height;}
-    size_t       stride() const RMGR_NOEXCEPT {return m_stride;}
-    uint32_t     margin() const RMGR_NOEXCEPT {return m_margin;}
-
-private:
-    Float*   m_buffer; ///< Pointer to the buffer holding data
-    uint32_t m_width;  ///< Image's width,  in pixels
-    uint32_t m_height; ///< Image's height, in pixels
-    size_t   m_stride; ///< Buffer's stride in number of floats
-    uint32_t m_margin;
-   
-};
-
-
-/**
- * @brief Multiplies an image by another one
- */
-static int multiply(Image& product, const Image& a, const Image& b) RMGR_NOEXCEPT
-{
-    assert(a.width()  == b.width());
-    assert(a.height() == b.height());
-    assert(a.margin() == b.margin());
-
-    if (&product != &a && &product != &b)
-    {
-        int err = product.init(a.width(), a.height(), a.margin());
-        if (err != 0)
-            return err;
-    }
-
-    const uint32_t w  = a.width()  + 2 * a.margin();
-    const uint32_t h  = a.height() + 2 * a.margin();
-    const Float*   pa = a.buffer();
-    const Float*   pb = b.buffer();
-    Float*         pp = product.buffer();
-    for (uint32_t y=0; y<h; ++y)
-    {
-        for (uint32_t x=0; x<w; ++x)
-            *pp++ = *pa++ * *pb++;
-        pa += a.stride() - w;
-        pb += b.stride() - w;
-        pp += product.stride() - w;
-    }
-
-    return 0;
-}
-
-
 /**
  * @brief Multiplies a tile by another tile
  */
@@ -356,36 +207,7 @@ static void precompute_gaussian_kernel(Float kernel[], int radius, Float sigma) 
 }
 
 
-static int gaussian_blur(Image& dest, const Image& srce, const Float kernel[], int radius) RMGR_NOEXCEPT
-{
-    assert(unsigned(radius) <= srce.margin());
-
-    int err = dest.init(srce.width(), srce.height());
-    if (err != 0)
-        return err;
-
-    const int32_t width  = srce.width();
-    const int32_t height = srce.height();
-    for (int32_t yd=0; yd<height; ++yd)
-    {
-        for (int32_t xd=0; xd<width; ++xd)
-        {
-            Float val = 0;
-            const Float* k = kernel;
-            for (int32_t ys=yd-radius; ys<=yd+radius; ++ys)
-            {
-                for (int32_t xs=xd-radius; xs<=xd+radius; ++xs)
-                    val += *k++ * srce[ys][xs];
-            }
-            dest[yd][xd] = val;
-        }
-    }
-
-    return 0;
-}
-
-
-void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
+static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
 {
     assert(width  > 0);
     assert(height > 0);
@@ -576,7 +398,6 @@ float compute_ssim(uint32_t width, uint32_t height,
     Float kernelBuffer[(2*radius+1) * (2*radius+1)];
     precompute_gaussian_kernel(kernelBuffer, radius, sigma);
 
-#if 1
     const Float* kernel = kernelBuffer + radius * (2*radius+1) + radius; // Center of the kernel
 
     const uint32_t tileSize   = 64;
@@ -664,67 +485,6 @@ float compute_ssim(uint32_t width, uint32_t height,
             sum += tileSum;
         }
     }
-
-#else
-
-    int err;
-    #define CHECK(exp) if ((err = exp) != 0) return float(err)
-
-    // Convert images to float
-    Image a, b;
-    if ((err = a.init(imgAData, width, height, imgAStep, imgAStride, radius)) != 0)
-        return float(err);
-    if ((err = b.init(imgBData, width, height, imgBStep, imgBStride, radius)) != 0)
-        return float(err);
-
-    // Multiply them
-    Image a2, b2, ab;
-    CHECK(multiply(a2, a, a));
-    CHECK(multiply(b2, b, b));
-    CHECK(multiply(ab, a, b));
-
-    // Apply Gaussian blur to all above images
-    Image muAImg, muBImg, sigmaA2Img, sigmaB2Img, sigmaABImg;
-    CHECK(gaussian_blur(muAImg,     a,  kernelBuffer, radius));   a.release();
-    CHECK(gaussian_blur(muBImg,     b,  kernelBuffer, radius));   b.release();
-    CHECK(gaussian_blur(sigmaA2Img, a2, kernelBuffer, radius));   a2.release();
-    CHECK(gaussian_blur(sigmaB2Img, b2, kernelBuffer, radius));   b2.release();
-    CHECK(gaussian_blur(sigmaABImg, ab, kernelBuffer, radius));   ab.release();
-
-    double sum = 0.0f;
-    for (uint32_t y=0; y<height; ++y)
-    {
-        for (uint32_t x=0; x<width; ++x)
-        {
-            const double muA     = muAImg[y][x];
-            const double muB     = muBImg[y][x];
-            const double muA2    = muA * muA;
-            const double muB2    = muB * muB;
-            const double muAB    = muA * muB;
-            const double sigmaA2 = sigmaA2Img[y][x] - muA2;
-            const double sigmaB2 = sigmaB2Img[y][x] - muB2;
-            const double sigmaAB = sigmaABImg[y][x] - muAB;
-
-            const double numerator1   = 2 * muAB    + c1;
-            const double numerator2   = 2 * sigmaAB + c2;
-            const double denominator1 = muA2 + muB2 + c1;
-            const double denominator2 = sigmaA2 + sigmaB2 + c2;
-
-            const double numerator   = numerator1 * numerator2;
-            const double denominator = denominator1 * denominator2;
-
-            const double ssim = numerator / denominator;
-            sum += ssim;
-
-            if (ssimMap != NULL)
-            {
-                *ssimMap = Float(ssim);
-                ssimMap += ssimStep;
-            }
-        }
-        ssimMap += ssimStride - int32_t(width) * ssimStep;
-    }
-#endif
 
     return float(sum / double(width * height));
 }
