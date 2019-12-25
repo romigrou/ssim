@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cerrno>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 
@@ -400,57 +401,66 @@ float compute_ssim(uint32_t width, uint32_t height,
 
     const Float* kernel = kernelBuffer + radius * (2*radius+1) + radius; // Center of the kernel
 
-    const uint32_t tileSize   = 64;
-    const uint32_t tileStride = tileSize + 2 *radius;
+    const uint32_t tileWidth  = 256;
+    const uint32_t tileHeight =  64;
+    const uint32_t tileWidthPlusMargins = tileWidth  + 2 *radius;
+    const uint32_t tileHeightPlusMargins= tileHeight + 2 *radius;
 
     double sum = 0.0;
-    for (uint32_t ty=0; ty<height; ty+=tileSize)
+    for (uint32_t ty=0; ty<height; ty+=tileHeight)
     {
-        const uint32_t th = std::min(tileSize, height-ty);
-        for (uint32_t tx=0; tx<width; tx+=tileSize)
+        const uint32_t th = std::min(tileHeight, height-ty);
+        for (uint32_t tx=0; tx<width; tx+=tileWidth)
         {
-            const uint32_t tw = std::min(tileSize, width-tx);
+            const uint32_t tw = std::min(tileWidth, width-tx);
 
-            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer1[tileSize   * tileSize];   // Yes, this one needs not be as large as the other ones
-            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer2[tileStride * tileStride];
-            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer3[tileStride * tileStride];
-            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer4[tileStride * tileStride];
-            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer5[tileStride * tileStride];
-            RMGR_ALIGNED(RMGR_SSIM_TILE_ALIGNMENT) Float buffer6[tileStride * tileStride];
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer1[tileWidth            * tileHeight]);   // Yes, this one needs not be as large as the other ones
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer2[tileWidthPlusMargins * tileHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer3[tileWidthPlusMargins * tileHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer4[tileWidthPlusMargins * tileHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer5[tileWidthPlusMargins * tileHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer6[tileWidthPlusMargins * tileHeightPlusMargins]);
+
+            if (uintptr_t(buffer1) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer1\n"); exit(1);}
+            if (uintptr_t(buffer2) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer2\n"); exit(1);}
+            if (uintptr_t(buffer3) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer3\n"); exit(1);}
+            if (uintptr_t(buffer4) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer4\n"); exit(1);}
+            if (uintptr_t(buffer5) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer5\n"); exit(1);}
+            if (uintptr_t(buffer6) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer6\n"); exit(1);}
 
             Float* a = buffer2;
             Float* b = buffer3;
-            retrieve_tile(a, tw, th, tileStride, radius, tx, ty, imgAData, width, height, imgAStep, imgAStride);
-            retrieve_tile(b, tw, th, tileStride, radius, tx, ty, imgBData, width, height, imgBStep, imgBStride);
+            retrieve_tile(a, tw, th, tileWidthPlusMargins, radius, tx, ty, imgAData, width, height, imgAStep, imgAStride);
+            retrieve_tile(b, tw, th, tileWidthPlusMargins, radius, tx, ty, imgBData, width, height, imgBStep, imgBStride);
 
             Float* a2 = buffer4;
             Float* b2 = buffer5;
             Float* ab = buffer6;
-            multiply(a2, a, a, tw+2*radius, th+2*radius, tileStride);
-            multiply(b2, b, b, tw+2*radius, th+2*radius, tileStride);
-            multiply(ab, a, b, tw+2*radius, th+2*radius, tileStride);
+            multiply(a2, a, a, tw+2*radius, th+2*radius, tileWidthPlusMargins);
+            multiply(b2, b, b, tw+2*radius, th+2*radius, tileWidthPlusMargins);
+            multiply(ab, a, b, tw+2*radius, th+2*radius, tileWidthPlusMargins);
 
             Float* muATile     = buffer1;
             Float* muBTile     = buffer2;
             Float* sigmaA2Tile = buffer3;
             Float* sigmaB2Tile = buffer4;
             Float* sigmaABTile = buffer5;
-            gaussianBlur(muATile,     tileSize, a  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussianBlur(muBTile,     tileSize, b  + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussianBlur(sigmaA2Tile, tileSize, a2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussianBlur(sigmaB2Tile, tileSize, b2 + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
-            gaussianBlur(sigmaABTile, tileSize, ab + radius*tileStride + radius, tileStride, tw, th, kernel, radius);
+            gaussianBlur(muATile,     tileWidth, a  + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(muBTile,     tileWidth, b  + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(sigmaA2Tile, tileWidth, a2 + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(sigmaB2Tile, tileWidth, b2 + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(sigmaABTile, tileWidth, ab + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
 
             float* ssimTile = ssimMap + tx * ssimStep + ty * ssimStride;
 
             double tileSum = 0.0f;
             for (uint32_t y=0; y<th; ++y)
             {
-                const Float* muARow     = muATile     + y * tileSize;
-                const Float* muBRow     = muBTile     + y * tileSize;
-                const Float* sigmaA2Row = sigmaA2Tile + y * tileSize;
-                const Float* sigmaB2Row = sigmaB2Tile + y * tileSize;
-                const Float* sigmaABRow = sigmaABTile + y * tileSize;
+                const Float* muARow     = muATile     + y * tileWidth;
+                const Float* muBRow     = muBTile     + y * tileWidth;
+                const Float* sigmaA2Row = sigmaA2Tile + y * tileWidth;
+                const Float* sigmaB2Row = sigmaB2Tile + y * tileWidth;
+                const Float* sigmaABRow = sigmaABTile + y * tileWidth;
                 float*       ssimPtr    = ssimTile    + y * ssimStride;
                 for (uint32_t x=0; x<tw; ++x)
                 {
