@@ -316,28 +316,28 @@ volatile GaussianBlurFct g_gaussianBlurFct = NULL;
 
 #ifdef _MSC_VER
     #include <intrin.h>
-    static inline void CpuId(int leaf, int regs[4]) noexcept
+    static inline void cpu_id(int leaf, int regs[4]) RMGR_NOEXCEPT
     {
         __cpuid(regs, leaf);
     }
 #else
     #include <cpuid.h>
-    static inline void CpuId(int leaf, int regs[4]) noexcept
+    static inline void cpu_id(int leaf, int regs[4]) RMGR_NOEXCEPT
     {
         __get_cpuid(leaf, reinterpret_cast<unsigned*>(regs), reinterpret_cast<unsigned*>(regs+1), reinterpret_cast<unsigned*>(regs+2), reinterpret_cast<unsigned*>(regs+3));
     }
 #endif
 
 
-static void init_x86()
+static void init_x86() RMGR_NOEXCEPT
 {
     // Detect machine's features
     int regs[4] = {};
-    CpuId(0, regs);
+    cpu_id(0, regs);
     const uint32_t maxLeaf = regs[0];
     if (maxLeaf >= 1)
     {
-        CpuId(1, regs);
+        cpu_id(1, regs);
         const uint32_t ecx = regs[2];
         const uint32_t edx = regs[3];
 
