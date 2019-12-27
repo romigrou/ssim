@@ -36,86 +36,86 @@
 /** @endcond */
 
 #if !defined(RMGR_COMPILER_IS_NOT_DOXYGEN)
-    #define RMGR_COMPILER_IS_DOXYGEN         1
+    #define RMGR_COMPILER_IS_DOXYGEN                     1
 
 #elif defined(__clang__)
     #ifndef RMGR_COMPILER_IS_CLANG
-        #define RMGR_COMPILER_IS_CLANG       1
+        #define RMGR_COMPILER_IS_CLANG                   1
     #endif
     #ifndef RMGR_COMPILER_VERSION_MAJOR
-        #define RMGR_COMPILER_VERSION_MAJOR  __clang_major__
+        #define RMGR_COMPILER_VERSION_MAJOR              __clang_major__
     #endif
     #ifndef RMGR_COMPILER_VERSION_MINOR
-        #define RMGR_COMPILER_VERSION_MINOR  __clang_minor__
+        #define RMGR_COMPILER_VERSION_MINOR              __clang_minor__
     #endif
     #ifndef RMGR_COMPILER_VERSION_PATCH
-        #define RMGR_COMPILER_VERSION_PATCH  __clang_patchlevel__
+        #define RMGR_COMPILER_VERSION_PATCH              __clang_patchlevel__
     #endif
     #ifndef RMGR_WARNING_PUSH
-        #define RMGR_WARNING_PUSH()          _Pragma("clang diagnostic push")
+        #define RMGR_WARNING_PUSH()                      _Pragma("clang diagnostic push")
     #endif
     #ifndef RMGR_WARNING_POP
-        #define RMGR_WARNING_POP()           _Pragma("clang diagnostic pop")
+        #define RMGR_WARNING_POP()                       _Pragma("clang diagnostic pop")
     #endif
     #ifndef RMGR_WARNING_CLANG_DISABLE
-        #define RMGR_WARNING_CLANG_DO_DISABLE(string)  _Pragma(#string)
-        #define RMGR_WARNING_CLANG_DISABLE(name)       RMGR_WARNING_CLANG_DO_DISABLE(clang diagnostic ignored name)
+        #define RMGR_WARNING_CLANG_DO_DISABLE(string)    _Pragma(#string)
+        #define RMGR_WARNING_CLANG_DISABLE(name)         RMGR_WARNING_CLANG_DO_DISABLE(clang diagnostic ignored name)
     #endif
-    #ifndef RMGR_ALIGNED
-        #define RMGR_ALIGNED(alignment)      __attribute__((aligned(alignment)))
+    #ifndef RMGR_ALIGNED_VAR
+        #define RMGR_ALIGNED_VAR(alignment, type, name)  type name __attribute__((aligned(alignment)))
     #endif
 
 #elif defined(_MSC_VER)
     #ifndef RMGR_COMPILER_IS_MSVC
-        #define RMGR_COMPILER_IS_MSVC        1
+        #define RMGR_COMPILER_IS_MSVC                    1
     #endif
     #ifndef RMGR_COMPILER_VERSION_MAJOR
-        #define RMGR_COMPILER_VERSION_MAJOR  (_MSC_VER / 100)
+        #define RMGR_COMPILER_VERSION_MAJOR              (_MSC_VER / 100)
     #endif
     #ifndef RMGR_COMPILER_VERSION_MINOR
-        #define RMGR_COMPILER_VERSION_MINOR  (_MSC_VER % 100)
+        #define RMGR_COMPILER_VERSION_MINOR              (_MSC_VER % 100)
     #endif
     #ifndef RMGR_COMPILER_VERSION_PATCH
-        #define RMGR_COMPILER_VERSION_PATCH  (_MSC_FULL_VER % 100000)
+        #define RMGR_COMPILER_VERSION_PATCH              (_MSC_FULL_VER % 100000)
     #endif
     #ifndef RMGR_WARNING_PUSH
-        #define RMGR_WARNING_PUSH()          __pragma(warning(push))
+        #define RMGR_WARNING_PUSH()                      __pragma(warning(push))
     #endif
     #ifndef RMGR_WARNING_POP
-        #define RMGR_WARNING_POP()           __pragma(warning(pop))
+        #define RMGR_WARNING_POP()                       __pragma(warning(pop))
     #endif
     #ifndef RMGR_WARNING_MSVC_DISABLE
-        #define RMGR_WARNING_MSVC_DISABLE(number)  __pragma(warning(disable: number))
+        #define RMGR_WARNING_MSVC_DISABLE(number)        __pragma(warning(disable: number))
     #endif
-    #ifndef RMGR_ALIGNED
-        #define RMGR_ALIGNED(alignment)      __declspec(align(alignment))
+    #ifndef RMGR_ALIGNED_VAR
+        #define RMGR_ALIGNED_VAR(alignment, type, name)  __declspec(align(alignment)) type name
     #endif
 
 #elif defined(__GNUC__)
     #ifndef RMGR_COMPILER_IS_GCC
-        #define RMGR_COMPILER_IS_GCC         1
+        #define RMGR_COMPILER_IS_GCC                     1
     #endif
     #ifndef RMGR_COMPILER_VERSION_MAJOR
-        #define RMGR_COMPILER_VERSION_MAJOR  __GNUC__
+        #define RMGR_COMPILER_VERSION_MAJOR              __GNUC__
     #endif
     #ifndef RMGR_COMPILER_VERSION_MINOR
-        #define RMGR_COMPILER_VERSION_MINOR  __GNUC_MINOR__
+        #define RMGR_COMPILER_VERSION_MINOR              __GNUC_MINOR__
     #endif
     #ifndef RMGR_COMPILER_VERSION_PATCH
-        #define RMGR_COMPILER_VERSION_PATCH  __GNUC_PATCHLEVEL__
+        #define RMGR_COMPILER_VERSION_PATCH              __GNUC_PATCHLEVEL__
     #endif
     #ifndef RMGR_WARNING_PUSH
-        #define RMGR_WARNING_PUSH()          _Pragma("GCC diagnostic push")
+        #define RMGR_WARNING_PUSH()                      _Pragma("GCC diagnostic push")
     #endif
     #ifndef RMGR_WARNING_POP
-        #define RMGR_WARNING_POP()           _Pragma("GCC diagnostic pop")
+        #define RMGR_WARNING_POP()                       _Pragma("GCC diagnostic pop")
     #endif
     #ifndef RMGR_WARNING_GCC_DISABLE
-        #define RMGR_WARNING_GCC_DO_DISABLE(string)  _Pragma(#string)
-        #define RMGR_WARNING_GCC_DISABLE(name)       RMGR_WARNING_GCC_DO_DISABLE(GCC diagnostic ignored name)
+        #define RMGR_WARNING_GCC_DO_DISABLE(string)      _Pragma(#string)
+        #define RMGR_WARNING_GCC_DISABLE(name)           RMGR_WARNING_GCC_DO_DISABLE(GCC diagnostic ignored name)
     #endif
-    #ifndef RMGR_ALIGNED
-        #define RMGR_ALIGNED(alignment)      __attribute__((aligned(alignment)))
+    #ifndef RMGR_ALIGNED_VAR
+        #define RMGR_ALIGNED_VAR(alignment, type, name)  type name __attribute__((aligned(alignment)))
     #endif
 #endif
 
@@ -294,11 +294,11 @@
 //=================================================================================================
 // Other stuff
 
-#ifndef RMGR_ALIGNED
+#ifndef RMGR_ALIGNED_VAR
     #if RMGR_CPP_VERSION >= 201103
-        #define RMGR_ALIGNED(alignment)  alignas(alignment)
+        #define RMGR_ALIGNED_VAR(alignment, type, name)  alignas(alignment) type name
     #else
-        #define RMGR_ALIGNED(alignment)
+        #define RMGR_ALIGNED(alignment, type, name)      type name
     #endif
 #endif
 
