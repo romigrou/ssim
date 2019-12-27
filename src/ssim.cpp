@@ -19,7 +19,7 @@
  */
 
 #include <rmgr/ssim.h>
-#include "ssim_simd.h"
+#include "ssim_internal.h"
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
@@ -40,10 +40,6 @@
 #ifndef RMGR_SSIM_TILE_ALIGNMENT
     #define RMGR_SSIM_TILE_ALIGNMENT  64
 #endif
-
-
-typedef float Float;
-
 
 
 //=================================================================================================
@@ -305,15 +301,62 @@ static void retrieve_tile(Float* tile, uint32_t tileWidth, uint32_t tileHeight, 
 }
 
 
+double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, double c1, double c2,
+                const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
+                float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
+{
+    double tileSum = 0.0f;
+    for (uint32_t y=0; y<tileHeight; ++y)
+    {
+        const Float* muARow     = muATile     + y * tileStride;
+        const Float* muBRow     = muBTile     + y * tileStride;
+        const Float* sigmaA2Row = sigmaA2Tile + y * tileStride;
+        const Float* sigmaB2Row = sigmaB2Tile + y * tileStride;
+        const Float* sigmaABRow = sigmaABTile + y * tileStride;
+        float*       ssimPtr    = ssimTile    + y * ssimStride;
+        for (uint32_t x=0; x<tileWidth; ++x)
+        {
+            const double muA     = muARow[x];
+            const double muB     = muBRow[x];
+            const double muA2    = muA * muA;
+            const double muB2    = muB * muB;
+            const double muAB    = muA * muB;
+            const double sigmaA2 = sigmaA2Row[x] - muA2;
+            const double sigmaB2 = sigmaB2Row[x] - muB2;
+            const double sigmaAB = sigmaABRow[x] - muAB;
+
+            const double numerator1   = 2 * muAB    + c1;
+            const double numerator2   = 2 * sigmaAB + c2;
+            const double denominator1 = muA2 + muB2 + c1;
+            const double denominator2 = sigmaA2 + sigmaB2 + c2;
+
+            const double numerator   = numerator1 * numerator2;
+            const double denominator = denominator1 * denominator2;
+
+            const double ssim = numerator / denominator;
+            tileSum += ssim;
+
+            if (ssimTile != NULL)
+            {
+                *ssimPtr = float(ssim);
+                ssimPtr += ssimStep;
+            }
+        }
+    }
+    return tileSum;
+}
+
+
 volatile GaussianBlurFct g_gaussianBlurFct = NULL;
+volatile SumTileFct      g_sumTileFct      = NULL;
+
+}} // namespace rmgr::ssim
 
 
 //=================================================================================================
 // x86 init
 
 #if RMGR_ARCH_IS_X86_ANY
-
-
 
 #ifdef _MSC_VER
     #include <intrin.h>
@@ -332,6 +375,8 @@ volatile GaussianBlurFct g_gaussianBlurFct = NULL;
 
 static void init_x86() RMGR_NOEXCEPT
 {
+    using namespace rmgr::ssim;
+
     // Detect machine's features
     int regs[4] = {};
     cpu_id(0, regs);
@@ -343,15 +388,23 @@ static void init_x86() RMGR_NOEXCEPT
         const uint32_t edx = regs[3];
 
         if ((ecx & (1 << 28))!=0 && avx::g_gaussianBlurFct!=NULL)
+        {
             g_gaussianBlurFct = avx::g_gaussianBlurFct;
+            g_sumTileFct      = sum_tile;
+        }
         else if ((edx & (1 << 25))!=0 && sse::g_gaussianBlurFct!=NULL)
+        {
             g_gaussianBlurFct = sse::g_gaussianBlurFct;
+            g_sumTileFct      = sum_tile;
+        }
         else
+        {
             g_gaussianBlurFct = gaussian_blur;
+            g_sumTileFct      = sum_tile;
+        }
     }
 }
-
-    
+   
 
 #endif // RMGR_ARCH_IS_X86_ANY
 
@@ -359,27 +412,30 @@ static void init_x86() RMGR_NOEXCEPT
 //=================================================================================================
 // Main function
 
-float compute_ssim(uint32_t width, uint32_t height,
-                   const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                   const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
+float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
+                               const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
+                               const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
+                               float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
     GaussianBlurFct gaussianBlur = g_gaussianBlurFct;
+    SumTileFct      sumTile      = g_sumTileFct;
     if (gaussianBlur == NULL)
     {
 #if RMGR_ARCH_IS_X86_ANY
         init_x86();
 #else
         g_gaussianBlurFct = gaussian_blur;
+        g_sumTileFct      = sum_tile;
 #endif
         gaussianBlur = g_gaussianBlurFct;
+        sumTile      = g_sumTileFct;
     }
 
-    const Float k1 = Float(0.01);
-    const Float k2 = Float(0.03);
-    const Float L  = UINT8_MAX;
-    const Float c1 = (k1 * L) * (k1 * L);
-    const Float c2 = (k2 * L) * (k2 * L);
+    const double k1 = 0.01;
+    const double k2 = 0.03;
+    const double L  = UINT8_MAX;
+    const double c1 = (k1 * L) * (k1 * L);
+    const double c2 = (k2 * L) * (k2 * L);
 
     if (imgAData==NULL || imgBData==NULL)
     {
@@ -401,25 +457,25 @@ float compute_ssim(uint32_t width, uint32_t height,
 
     const Float* kernel = kernelBuffer + radius * (2*radius+1) + radius; // Center of the kernel
 
-    const uint32_t tileWidth  = 256;
-    const uint32_t tileHeight =  64;
-    const uint32_t tileWidthPlusMargins = tileWidth  + 2 *radius;
-    const uint32_t tileHeightPlusMargins= tileHeight + 2 *radius;
+    const uint32_t tileMaxWidth  = 256;
+    const uint32_t tileMaxHeight =  64;
+    const uint32_t tileMaxWidthPlusMargins = tileMaxWidth  + 2 *radius;
+    const uint32_t tileMaxHeightPlusMargins= tileMaxHeight + 2 *radius;
 
     double sum = 0.0;
-    for (uint32_t ty=0; ty<height; ty+=tileHeight)
+    for (uint32_t ty=0; ty<height; ty+=tileMaxHeight)
     {
-        const uint32_t th = std::min(tileHeight, height-ty);
-        for (uint32_t tx=0; tx<width; tx+=tileWidth)
+        const uint32_t th = std::min(tileMaxHeight, height-ty);
+        for (uint32_t tx=0; tx<width; tx+=tileMaxWidth)
         {
-            const uint32_t tw = std::min(tileWidth, width-tx);
+            const uint32_t tw = std::min(tileMaxWidth, width-tx);
 
-            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer1[tileWidth            * tileHeight]);   // Yes, this one needs not be as large as the other ones
-            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer2[tileWidthPlusMargins * tileHeightPlusMargins]);
-            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer3[tileWidthPlusMargins * tileHeightPlusMargins]);
-            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer4[tileWidthPlusMargins * tileHeightPlusMargins]);
-            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer5[tileWidthPlusMargins * tileHeightPlusMargins]);
-            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer6[tileWidthPlusMargins * tileHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer1[tileMaxWidth            * tileMaxHeight]);   // Yes, this one needs not be as large as the other ones
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer2[tileMaxWidthPlusMargins * tileMaxHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer3[tileMaxWidthPlusMargins * tileMaxHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer4[tileMaxWidthPlusMargins * tileMaxHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer5[tileMaxWidthPlusMargins * tileMaxHeightPlusMargins]);
+            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffer6[tileMaxWidthPlusMargins * tileMaxHeightPlusMargins]);
 
             if (uintptr_t(buffer1) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer1\n"); exit(1);}
             if (uintptr_t(buffer2) % RMGR_SSIM_TILE_ALIGNMENT != 0) {printf("bad alignment buffer2\n"); exit(1);}
@@ -430,74 +486,31 @@ float compute_ssim(uint32_t width, uint32_t height,
 
             Float* a = buffer2;
             Float* b = buffer3;
-            retrieve_tile(a, tw, th, tileWidthPlusMargins, radius, tx, ty, imgAData, width, height, imgAStep, imgAStride);
-            retrieve_tile(b, tw, th, tileWidthPlusMargins, radius, tx, ty, imgBData, width, height, imgBStep, imgBStride);
+            retrieve_tile(a, tw, th, tileMaxWidthPlusMargins, radius, tx, ty, imgAData, width, height, imgAStep, imgAStride);
+            retrieve_tile(b, tw, th, tileMaxWidthPlusMargins, radius, tx, ty, imgBData, width, height, imgBStep, imgBStride);
 
             Float* a2 = buffer4;
             Float* b2 = buffer5;
             Float* ab = buffer6;
-            multiply(a2, a, a, tw+2*radius, th+2*radius, tileWidthPlusMargins);
-            multiply(b2, b, b, tw+2*radius, th+2*radius, tileWidthPlusMargins);
-            multiply(ab, a, b, tw+2*radius, th+2*radius, tileWidthPlusMargins);
+            multiply(a2, a, a, tw+2*radius, th+2*radius, tileMaxWidthPlusMargins);
+            multiply(b2, b, b, tw+2*radius, th+2*radius, tileMaxWidthPlusMargins);
+            multiply(ab, a, b, tw+2*radius, th+2*radius, tileMaxWidthPlusMargins);
 
             Float* muATile     = buffer1;
             Float* muBTile     = buffer2;
             Float* sigmaA2Tile = buffer3;
             Float* sigmaB2Tile = buffer4;
             Float* sigmaABTile = buffer5;
-            gaussianBlur(muATile,     tileWidth, a  + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
-            gaussianBlur(muBTile,     tileWidth, b  + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
-            gaussianBlur(sigmaA2Tile, tileWidth, a2 + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
-            gaussianBlur(sigmaB2Tile, tileWidth, b2 + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
-            gaussianBlur(sigmaABTile, tileWidth, ab + radius*tileWidthPlusMargins + radius, tileWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(muATile,     tileMaxWidth, a  + radius*tileMaxWidthPlusMargins + radius, tileMaxWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(muBTile,     tileMaxWidth, b  + radius*tileMaxWidthPlusMargins + radius, tileMaxWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(sigmaA2Tile, tileMaxWidth, a2 + radius*tileMaxWidthPlusMargins + radius, tileMaxWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(sigmaB2Tile, tileMaxWidth, b2 + radius*tileMaxWidthPlusMargins + radius, tileMaxWidthPlusMargins, tw, th, kernel, radius);
+            gaussianBlur(sigmaABTile, tileMaxWidth, ab + radius*tileMaxWidthPlusMargins + radius, tileMaxWidthPlusMargins, tw, th, kernel, radius);
 
             float* ssimTile = ssimMap + tx * ssimStep + ty * ssimStride;
-
-            double tileSum = 0.0f;
-            for (uint32_t y=0; y<th; ++y)
-            {
-                const Float* muARow     = muATile     + y * tileWidth;
-                const Float* muBRow     = muBTile     + y * tileWidth;
-                const Float* sigmaA2Row = sigmaA2Tile + y * tileWidth;
-                const Float* sigmaB2Row = sigmaB2Tile + y * tileWidth;
-                const Float* sigmaABRow = sigmaABTile + y * tileWidth;
-                float*       ssimPtr    = ssimTile    + y * ssimStride;
-                for (uint32_t x=0; x<tw; ++x)
-                {
-                    const double muA     = muARow[x];
-                    const double muB     = muBRow[x];
-                    const double muA2    = muA * muA;
-                    const double muB2    = muB * muB;
-                    const double muAB    = muA * muB;
-                    const double sigmaA2 = sigmaA2Row[x] - muA2;
-                    const double sigmaB2 = sigmaB2Row[x] - muB2;
-                    const double sigmaAB = sigmaABRow[x] - muAB;
-
-                    const double numerator1   = 2 * muAB    + c1;
-                    const double numerator2   = 2 * sigmaAB + c2;
-                    const double denominator1 = muA2 + muB2 + c1;
-                    const double denominator2 = sigmaA2 + sigmaB2 + c2;
-
-                    const double numerator   = numerator1 * numerator2;
-                    const double denominator = denominator1 * denominator2;
-
-                    const double ssim = numerator / denominator;
-                    tileSum += ssim;
-
-                    if (ssimMap != NULL)
-                    {
-                        *ssimPtr = float(ssim);
-                        ssimPtr += ssimStep;
-                    }
-                }
-            }
-
-            sum += tileSum;
+            sum += sum_tile(tw, th, tileMaxWidth, c1, c2, muATile, muBTile, sigmaA2Tile, sigmaB2Tile, sigmaABTile, ssimTile, ssimStep, ssimStride);
         }
     }
 
     return float(sum / double(width * height));
 }
-
-
-}} // namespace rmgr::ssim

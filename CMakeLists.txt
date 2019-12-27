@@ -36,7 +36,7 @@ endif()
 set(RMGR_SSIM_FILES
     "include/rmgr/ssim.h"
     "src/ssim.cpp"
-    "src/ssim_simd.h"
+    "src/ssim_internal.h"
     "src/ssim_sse.cpp"
     "src/ssim_avx.cpp"
 )
