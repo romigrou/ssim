@@ -18,7 +18,7 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#include "ssim_simd.h"
+#include "ssim_internal.h"
 
 #if !defined(__AVX__)
 
