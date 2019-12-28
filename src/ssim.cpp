@@ -204,7 +204,7 @@ static void precompute_gaussian_kernel(Float kernel[], int radius, Float sigma) 
     {
         printf("  ");
         for (int x = 0; x < size; x++)
-            printf("%9.7ff, ", kernel[x + y * size]);
+            printf("%19.17f, ", kernel[x + y * size]);
         printf("\n");
     }
     printf("}\n\n");
@@ -549,6 +549,12 @@ static void init_x86() RMGR_NOEXCEPT
 {
     using namespace rmgr::ssim;
 
+#if RMGR_SSIM_USE_DOUBLE
+    const unsigned sseShift = 26; // SSE2 (required for doubles)
+#else
+    const unsigned sseShift = 25; // SSE
+#endif
+
     // Detect machine's features
     int regs[4] = {};
     cpu_id(0, regs);
@@ -559,12 +565,12 @@ static void init_x86() RMGR_NOEXCEPT
         const uint32_t ecx = regs[2];
         const uint32_t edx = regs[3];
 
-        if ((ecx & (1 << 28))!=0 && avx::g_gaussianBlurFct!=NULL)
+        if (((ecx >> 28) & 1)!=0 && avx::g_gaussianBlurFct!=NULL)
         {
             g_gaussianBlurFct = avx::g_gaussianBlurFct;
             g_sumTileFct      = sum_tile;
         }
-        else if ((edx & (1 << 25))!=0 && sse::g_gaussianBlurFct!=NULL)
+        else if (((edx >> sseShift) & 1)!=0 && sse::g_gaussianBlurFct!=NULL)
         {
             g_gaussianBlurFct = sse::g_gaussianBlurFct;
             g_sumTileFct      = sum_tile;
@@ -629,7 +635,7 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
 
     const Float* kernel = kernelBuffer + radius * (2*radius+1) + radius; // Center of the kernel
 
-    const uint32_t tileMaxWidth    = 256;
+    const uint32_t tileMaxWidth    = 256 / (sizeof(Float) / sizeof(float));
     const uint32_t tileMaxHeight   =  64;
     const uint32_t horzMargin      = radius;
     const uint32_t vertMargin      = 2*radius; // The blur routines require an extra write margin vertically (but the read margin is equal to the radius)
