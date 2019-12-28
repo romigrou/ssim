@@ -594,9 +594,10 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
     const uint32_t horzMargin      = radius;
     const uint32_t vertMargin      = 2*radius; // The blur routines require an extra write margin vertically (but the read margin is equal to the radius)
     const size_t   bufferAlignment = RMGR_SSIM_TILE_ALIGNMENT / sizeof(Float);
+    const size_t   rowAlignment    = bufferAlignment;
     const uint32_t bufferWidth     = tileMaxWidth  + 2*horzMargin;
     const uint32_t bufferHeight    = tileMaxHeight + 2*vertMargin;
-    const size_t   bufferStride    = ALIGN_UP(bufferWidth, bufferAlignment);
+    const size_t   bufferStride    = ALIGN_UP(bufferWidth, rowAlignment);
     const size_t   bufferCapacity  = ALIGN_UP(bufferStride*bufferHeight + bufferAlignment-1, bufferAlignment);
 
     double sum = 0.0;
@@ -606,11 +607,11 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
         for (uint32_t tx=0; tx<width; tx+=tileMaxWidth)
         {
             const uint32_t tileWidth  = std::min(tileMaxWidth, width-tx);
-            const uint32_t tileStride = ALIGN_UP(tileWidth + 2*horzMargin, bufferAlignment);
+            const uint32_t tileStride = ALIGN_UP(tileWidth + 2*horzMargin, rowAlignment);
 
-            // Compute offset between start of buffer and top-lef pixel
-            const size_t offsetToTopLeft = vertMargin * tileStride + ALIGN_UP(horzMargin, bufferAlignment);
-            assert(offsetToTopLeft % bufferAlignment == 0);
+            // Compute offset between start of buffer and top-left pixel
+            const size_t offsetToTopLeft = vertMargin * tileStride + ALIGN_UP(horzMargin, rowAlignment);
+            assert(offsetToTopLeft % rowAlignment == 0);
             assert(offsetToTopLeft + tileStride*(tileHeight+vertMargin) - horzMargin <= bufferCapacity);
 
             RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][bufferCapacity]);
