@@ -64,14 +64,14 @@ static void gaussian_blur(float* dest, ptrdiff_t destStride, const float* srce, 
                 // 8x unrolled SSE loop
                 while ((xd -= 8*4) >= 0)
                 {
-                    const __m128 sk0 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
-                    const __m128 sk1 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
-                    const __m128 sk2 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
-                    const __m128 sk3 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
-                    const __m128 sk4 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
-                    const __m128 sk5 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
-                    const __m128 sk6 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
-                    const __m128 sk7 = _mm_mul_ps(_mm_load_ps(s), k128);  s += 4;
+                    const __m128 sk0 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
+                    const __m128 sk1 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
+                    const __m128 sk2 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
+                    const __m128 sk3 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
+                    const __m128 sk4 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
+                    const __m128 sk5 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
+                    const __m128 sk6 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
+                    const __m128 sk7 = _mm_mul_ps(_mm_loadu_ps(s), k128);  s += 4;
                     d128[0] = _mm_add_ps(sk0, d128[0]);
                     d128[1] = _mm_add_ps(sk1, d128[1]);
                     d128[2] = _mm_add_ps(sk2, d128[2]);
@@ -89,7 +89,7 @@ static void gaussian_blur(float* dest, ptrdiff_t destStride, const float* srce, 
                 // Epilogue SSE loop
                 while ((xd -= 4) >= 0)
                 {
-                    *d128 = _mm_add_ps(_mm_mul_ps(_mm_load_ps(s), k128), *d128);
+                    *d128 = _mm_add_ps(_mm_mul_ps(_mm_loadu_ps(s), k128), *d128);
                     ++d128;
                     s += 4;
                 }

@@ -64,14 +64,14 @@ static void gaussian_blur(float* dest, ptrdiff_t destStride, const float* srce, 
                 // 8x unrolled AVX loop
                 while ((xd -= 8*8) >= 0)
                 {
-                    const __m256 sk0 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
-                    const __m256 sk1 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
-                    const __m256 sk2 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
-                    const __m256 sk3 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
-                    const __m256 sk4 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
-                    const __m256 sk5 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
-                    const __m256 sk6 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
-                    const __m256 sk7 = _mm256_mul_ps(_mm256_load_ps(s), k256);  s += 8;
+                    const __m256 sk0 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
+                    const __m256 sk1 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
+                    const __m256 sk2 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
+                    const __m256 sk3 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
+                    const __m256 sk4 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
+                    const __m256 sk5 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
+                    const __m256 sk6 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
+                    const __m256 sk7 = _mm256_mul_ps(_mm256_loadu_ps(s), k256);  s += 8;
                     d256[0] = _mm256_add_ps(sk0, d256[0]);
                     d256[1] = _mm256_add_ps(sk1, d256[1]);
                     d256[2] = _mm256_add_ps(sk2, d256[2]);
@@ -89,7 +89,7 @@ static void gaussian_blur(float* dest, ptrdiff_t destStride, const float* srce, 
                 // Epilogue AVX loop
                 while ((xd -= 8) >= 0)
                 {
-                    *d256 = _mm256_add_ps(_mm256_mul_ps(_mm256_load_ps(s), k256), *d256);
+                    *d256 = _mm256_add_ps(_mm256_mul_ps(_mm256_loadu_ps(s), k256), *d256);
                     ++d256;
                     s += 8;
                 }
