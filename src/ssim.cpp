@@ -244,6 +244,9 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 
 #else
 
+    #define MUL_ADD(a, b, c)  ((a) + (b) * (c))
+    #define REUSE_S           (RMGR_ARCH_IS_ARM_64) // 64-bit ARM has 32 registers, enough to keep everything in registers
+
     // Faster, but tailored for the radius==5 case
     assert(radius == 5);
     const int32_t kernelStride = 11;
@@ -258,6 +261,19 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
     {
         memset(d+10*destStride, 0, width*sizeof(Float));
         int32_t xd = width;
+
+#if REUSE_S
+        Float s_5 = s[-5];
+        Float s_4 = s[-4];
+        Float s_3 = s[-3];
+        Float s_2 = s[-2];
+        Float s_1 = s[-1];
+        Float s0  = s[ 0];
+        Float s1  = s[ 1];
+        Float s2  = s[ 2];
+        Float s3  = s[ 3];
+        Float s4  = s[ 4];
+#endif
         do
         {
             // Unrolled code that exploits all the symmetries in the kernel.
@@ -265,12 +281,19 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
             // The diagonal symmetries say that k(x,y) == k(y,x), we cannot exploit that for factorizing,
             // but we can load fewer coefficients by keeping x <= y (21 coefficients instead of 36).
 
-            const Float s0  = s[0];
-            const Float s1  = s[1] + s[-1]; // Factorization due to the vertical line of symmetry
-            const Float s2  = s[2] + s[-2]; // Factorization due to the vertical line of symmetry
-            const Float s3  = s[3] + s[-3]; // Factorization due to the vertical line of symmetry
-            const Float s4  = s[4] + s[-4]; // Factorization due to the vertical line of symmetry
-            const Float s5  = s[5] + s[-5]; // Factorization due to the vertical line of symmetry
+#if !REUSE_S
+            const Float s0  = s[ 0];
+            const Float s_1 = s[-1];
+            const Float s1  = s[ 1];
+            const Float s_2 = s[-2];
+            const Float s2  = s[ 2];
+            const Float s_3 = s[-3];
+            const Float s3  = s[ 3];
+            const Float s_4 = s[-4];
+            const Float s4  = s[ 4];
+            const Float s_5 = s[-5];
+#endif
+            const Float s5  = s[5];
 
             Float sum0 = s0 * k(0,0);
             Float sum1 = s0 * k(0,1);
@@ -279,42 +302,46 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
             Float sum4 = s0 * k(0,4);
             Float sum5 = s0 * k(0,5);
 
-            sum0 += s1 * k(0,1);
-            sum1 += s1 * k(1,1);
-            sum2 += s1 * k(1,2);
-            sum3 += s1 * k(1,3);
-            sum4 += s1 * k(1,4);
-            sum5 += s1 * k(1,5);
+            const Float s11 = s1 + s_1;
+            sum0 = MUL_ADD(sum0, s11, k(0,1));
+            sum1 = MUL_ADD(sum1, s11, k(1,1));
+            sum2 = MUL_ADD(sum2, s11, k(1,2));
+            sum3 = MUL_ADD(sum3, s11, k(1,3));
+            sum4 = MUL_ADD(sum4, s11, k(1,4));
+            sum5 = MUL_ADD(sum5, s11, k(1,5));
 
-            sum0 += s2 * k(0,2);
-            sum1 += s2 * k(1,2);
-            sum2 += s2 * k(2,2);
-            sum3 += s2 * k(2,3);
-            sum4 += s2 * k(2,4);
-            sum5 += s2 * k(2,5);
+            const Float s22 = s2 + s_2;
+            sum0 = MUL_ADD(sum0, s22, k(0,2));
+            sum1 = MUL_ADD(sum1, s22, k(1,2));
+            sum2 = MUL_ADD(sum2, s22, k(2,2));
+            sum3 = MUL_ADD(sum3, s22, k(2,3));
+            sum4 = MUL_ADD(sum4, s22, k(2,4));
+            sum5 = MUL_ADD(sum5, s22, k(2,5));
 
-            sum0 += s3 * k(0,3);
-            sum1 += s3 * k(1,3);
-            sum2 += s3 * k(2,3);
-            sum3 += s3 * k(3,3);
-            sum4 += s3 * k(3,4);
-            sum5 += s3 * k(3,5);
+            const Float s33 = s3 + s_3;
+            sum0 = MUL_ADD(sum0, s33, k(0,3));
+            sum1 = MUL_ADD(sum1, s33, k(1,3));
+            sum2 = MUL_ADD(sum2, s33, k(2,3));
+            sum3 = MUL_ADD(sum3, s33, k(3,3));
+            sum4 = MUL_ADD(sum4, s33, k(3,4));
+            sum5 = MUL_ADD(sum5, s33, k(3,5));
 
-            sum0 += s4 * k(0,4);
-            sum1 += s4 * k(1,4);
-            sum2 += s4 * k(2,4);
-            sum3 += s4 * k(4,3);
-            sum4 += s4 * k(4,4);
-            sum5 += s4 * k(4,5);
+            const Float s44 = s4 + s_4;
+            sum0 = MUL_ADD(sum0, s44, k(0,4));
+            sum1 = MUL_ADD(sum1, s44, k(1,4));
+            sum2 = MUL_ADD(sum2, s44, k(2,4));
+            sum3 = MUL_ADD(sum3, s44, k(3,4));
+            sum4 = MUL_ADD(sum4, s44, k(4,4));
+            sum5 = MUL_ADD(sum5, s44, k(4,5));
 
-            sum0 += s5 * k(0,5);
-            sum1 += s5 * k(1,5);
-            sum2 += s5 * k(2,5);
-            sum3 += s5 * k(3,5);
-            sum4 += s5 * k(4,5);
-            sum5 += s5 * k(5,5);
+            const Float s55 = s5 + s_5;
+            sum0 = MUL_ADD(sum0, s55, k(0,5));
+            sum1 = MUL_ADD(sum1, s55, k(1,5));
+            sum2 = MUL_ADD(sum2, s55, k(2,5));
+            sum3 = MUL_ADD(sum3, s55, k(3,5));
+            sum4 = MUL_ADD(sum4, s55, k(4,5));
+            sum5 = MUL_ADD(sum5, s55, k(5,5));
 
-            // Reuse sums thanks to horizontal line of symmetry
             Float* pd = d;
             *pd += sum5;  pd+=destStride;
             *pd += sum4;  pd+=destStride;
@@ -327,6 +354,19 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
             *pd += sum3;  pd+=destStride;
             *pd += sum4;  pd+=destStride;
             *pd += sum5;
+
+#if REUSE_S
+            s_5 = s_4;
+            s_4 = s_3;
+            s_3 = s_2;
+            s_2 = s_1;
+            s_1 = s0; 
+            s0  = s1; 
+            s1  = s2; 
+            s2  = s3; 
+            s3  = s4; 
+            s4  = s5;
+#endif
 
             ++s;
             ++d;
