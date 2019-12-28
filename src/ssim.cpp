@@ -254,171 +254,73 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
         int32_t xd = width;
         do
         {
+            // Unrolled code that exploits all the symmetries in the kernel.
+            // Vertical and horizontal symmetries allow us to save a lot of computation thanks to factorization.
+            // The diagonal symmetries say that k(x,y) == k(y,x), we cannot exploit that for factorizing,
+            // but we can load fewer coefficients by keeping x <= y (21 coefficients instead of 36).
+
+            const Float s0  = s[0];
+            const Float s1  = s[1] + s[-1]; // Factorization due to the vertical line of symmetry
+            const Float s2  = s[2] + s[-2]; // Factorization due to the vertical line of symmetry
+            const Float s3  = s[3] + s[-3]; // Factorization due to the vertical line of symmetry
+            const Float s4  = s[4] + s[-4]; // Factorization due to the vertical line of symmetry
+            const Float s5  = s[5] + s[-5]; // Factorization due to the vertical line of symmetry
+
+            Float sum0 = s0 * k(0,0);
+            Float sum1 = s0 * k(0,1);
+            Float sum2 = s0 * k(0,2);
+            Float sum3 = s0 * k(0,3);
+            Float sum4 = s0 * k(0,4);
+            Float sum5 = s0 * k(0,5);
+
+            sum0 += s1 * k(0,1);
+            sum1 += s1 * k(1,1);
+            sum2 += s1 * k(1,2);
+            sum3 += s1 * k(1,3);
+            sum4 += s1 * k(1,4);
+            sum5 += s1 * k(1,5);
+
+            sum0 += s2 * k(0,2);
+            sum1 += s2 * k(1,2);
+            sum2 += s2 * k(2,2);
+            sum3 += s2 * k(2,3);
+            sum4 += s2 * k(2,4);
+            sum5 += s2 * k(2,5);
+
+            sum0 += s3 * k(0,3);
+            sum1 += s3 * k(1,3);
+            sum2 += s3 * k(2,3);
+            sum3 += s3 * k(3,3);
+            sum4 += s3 * k(3,4);
+            sum5 += s3 * k(3,5);
+
+            sum0 += s4 * k(0,4);
+            sum1 += s4 * k(1,4);
+            sum2 += s4 * k(2,4);
+            sum3 += s4 * k(4,3);
+            sum4 += s4 * k(4,4);
+            sum5 += s4 * k(4,5);
+
+            sum0 += s5 * k(0,5);
+            sum1 += s5 * k(1,5);
+            sum2 += s5 * k(2,5);
+            sum3 += s5 * k(3,5);
+            sum4 += s5 * k(4,5);
+            sum5 += s5 * k(5,5);
+
+            // Reuse sums thanks to horizontal line of symmetry
             Float* pd = d;
-            Float dA = *pd;  pd+=destStride;
-            Float dB = *pd;  pd+=destStride;
-            Float dC = *pd;  pd+=destStride;
-            Float dD = *pd;  pd+=destStride;
-            Float dE = *pd;  pd+=destStride;
-            Float dF = *pd;  pd+=destStride;
-            Float dG = *pd;  pd+=destStride;
-            Float dH = *pd;  pd+=destStride;
-            Float dI = *pd;  pd+=destStride;
-            Float dJ = *pd;  pd+=destStride;
-            Float dK = *pd;  pd = d;
-
-#if 0
-            // Non-unrolled code that exploits no symmetry
-            for (int32_t xk=-radius; xk<=radius; ++xk)
-            {
-                const float ss  = s[xk];
-                const float ks0 = ss * k0[xk];
-                const float ks1 = ss * k1[xk];
-                const float ks2 = ss * k2[xk];
-                const float ks3 = ss * k3[xk];
-                const float ks4 = ss * k4[xk];
-                const float ks5 = ss * k5[xk];
-                dA += ks5;
-                dB += ks4;
-                dC += ks3;
-                dD += ks2;
-                dE += ks1;
-                dF += ks0;
-                dG += ks1;
-                dH += ks2;
-                dI += ks3;
-                dJ += ks4;
-                dK += ks5;
-            }
-#else
-            // Unrolled code that exploits the horizontal and vertical symmetries in the kernel
-            const float s0  = s[0];
-            const float s1  = s[1] + s[-1];
-            const float s2  = s[2] + s[-2];
-            const float s3  = s[3] + s[-3];
-            const float s4  = s[4] + s[-4];
-            const float s5  = s[5] + s[-5];
-
-            const float s0k0 = s0 * k(0,0);
-            const float s0k1 = s0 * k(1,0);
-            const float s0k2 = s0 * k(2,0);
-            const float s0k3 = s0 * k(3,0);
-            const float s0k4 = s0 * k(4,0);
-            const float s0k5 = s0 * k(5,0);
-            dA += s0k5;
-            dB += s0k4;
-            dC += s0k3;
-            dD += s0k2;
-            dE += s0k1;
-            dF += s0k0;
-            dG += s0k1;
-            dH += s0k2;
-            dI += s0k3;
-            dJ += s0k4;
-            dK += s0k5;
-
-            const float s1k0 = s1 * k(0,1);
-            const float s1k1 = s1 * k(1,1);
-            const float s1k2 = s1 * k(2,1);
-            const float s1k3 = s1 * k(3,1);
-            const float s1k4 = s1 * k(4,1);
-            const float s1k5 = s1 * k(5,1);
-            dA += s1k5;
-            dB += s1k4;
-            dC += s1k3;
-            dD += s1k2;
-            dE += s1k1;
-            dF += s1k0;
-            dG += s1k1;
-            dH += s1k2;
-            dI += s1k3;
-            dJ += s1k4;
-            dK += s1k5;
-
-            const float s2k0 = s2 * k(0,2);
-            const float s2k1 = s2 * k(1,2);
-            const float s2k2 = s2 * k(2,2);
-            const float s2k3 = s2 * k(3,2);
-            const float s2k4 = s2 * k(4,2);
-            const float s2k5 = s2 * k(5,2);
-            dA += s2k5;
-            dB += s2k4;
-            dC += s2k3;
-            dD += s2k2;
-            dE += s2k1;
-            dF += s2k0;
-            dG += s2k1;
-            dH += s2k2;
-            dI += s2k3;
-            dJ += s2k4;
-            dK += s2k5;
-
-            const float s3k0 = s3 * k(0,3);
-            const float s3k1 = s3 * k(1,3);
-            const float s3k2 = s3 * k(2,3);
-            const float s3k3 = s3 * k(3,3);
-            const float s3k4 = s3 * k(4,3);
-            const float s3k5 = s3 * k(5,3);
-            dA += s3k5;
-            dB += s3k4;
-            dC += s3k3;
-            dD += s3k2;
-            dE += s3k1;
-            dF += s3k0;
-            dG += s3k1;
-            dH += s3k2;
-            dI += s3k3;
-            dJ += s3k4;
-            dK += s3k5;
-
-            const float s4k0 = s4 * k(0,4);
-            const float s4k1 = s4 * k(1,4);
-            const float s4k2 = s4 * k(2,4);
-            const float s4k3 = s4 * k(3,4);
-            const float s4k4 = s4 * k(4,4);
-            const float s4k5 = s4 * k(5,4);
-            dA += s4k5;
-            dB += s4k4;
-            dC += s4k3;
-            dD += s4k2;
-            dE += s4k1;
-            dF += s4k0;
-            dG += s4k1;
-            dH += s4k2;
-            dI += s4k3;
-            dJ += s4k4;
-            dK += s4k5;
-
-            const float s5k0 = s5 * k(0,5);
-            const float s5k1 = s5 * k(1,5);
-            const float s5k2 = s5 * k(2,5);
-            const float s5k3 = s5 * k(3,5);
-            const float s5k4 = s5 * k(4,5);
-            const float s5k5 = s5 * k(5,5);
-            dA += s5k5;
-            dB += s5k4;
-            dC += s5k3;
-            dD += s5k2;
-            dE += s5k1;
-            dF += s5k0;
-            dG += s5k1;
-            dH += s5k2;
-            dI += s5k3;
-            dJ += s5k4;
-            dK += s5k5;
-
-            *pd = dA;  pd+=destStride;
-            *pd = dB;  pd+=destStride;
-            *pd = dC;  pd+=destStride;
-            *pd = dD;  pd+=destStride;
-            *pd = dE;  pd+=destStride;
-            *pd = dF;  pd+=destStride;
-            *pd = dG;  pd+=destStride;
-            *pd = dH;  pd+=destStride;
-            *pd = dI;  pd+=destStride;
-            *pd = dJ;  pd+=destStride;
-            *pd = dK;
-#endif
+            *pd += sum5;  pd+=destStride;
+            *pd += sum4;  pd+=destStride;
+            *pd += sum3;  pd+=destStride;
+            *pd += sum2;  pd+=destStride;
+            *pd += sum1;  pd+=destStride;
+            *pd += sum0;  pd+=destStride;
+            *pd += sum1;  pd+=destStride;
+            *pd += sum2;  pd+=destStride;
+            *pd += sum3;  pd+=destStride;
+            *pd += sum4;  pd+=destStride;
+            *pd += sum5;
 
             ++s;
             ++d;
@@ -430,7 +332,7 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
     }
     while (--yd);
 
-    #undef d
+    #undef k
 #endif
 }
 
