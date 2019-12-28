@@ -435,6 +435,25 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 }
 
 
+/**
+ * @brief Retrieves a tile of an image, converting it to `Float` on the fly
+ *
+ * The tile is retrieved with margins, i.e. image data located around the tile. When the tile
+ * is located on a border of the image, data is simply duplicated to fill the tile as needed.
+ *
+ * @param [out] tile        Pointer to the tile buffer (inclusive of margins)
+ * @param [in]  tileWidth   The tile's width,  in pixels
+ * @param [in]  tileHeight  The tile's height, in pixels
+ * @param [in]  tileStride  Distance between a tile row and the row below it, in number of `Float`s
+ * @param [in]  margin      The size of the margin around the tile, in pixels
+ * @param [in]  x           Horizontal coordinate of the tile's top-left corner within the image
+ * @param [in]  y           Vertical   coordinate of the tile's top-left corner within the image
+ * @param [in]  imgData     Pointer to the top-left pixel of the image
+ * @param [in]  imgWidth    Image's width,  in pixels
+ * @param [in]  imgHeight   Image's height, in pixels
+ * @param [in]  imgStep     Distance between a pixel of the image and the one immediatelt to its right.
+ * @param [in]  imgStride   Distance between a pixel of the image and the one immediately below it.
+ */
 static void retrieve_tile(Float* tile, uint32_t tileWidth, uint32_t tileHeight, size_t tileStride, uint32_t margin, uint32_t x, uint32_t y,
                           const uint8_t* imgData, uint32_t imgWidth, uint32_t imgHeight, ptrdiff_t imgStep, ptrdiff_t imgStride) RMGR_NOEXCEPT
 {
