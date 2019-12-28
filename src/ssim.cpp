@@ -41,6 +41,8 @@
     #define RMGR_SSIM_TILE_ALIGNMENT  64
 #endif
 
+#define ALIGN_UP(size, alignment)  (((size) + (alignment)-1) & ~size_t((alignment)-1))
+
 
 //=================================================================================================
 // Allocator stuff
@@ -669,9 +671,10 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
         const uint32_t tileHeight = std::min(tileMaxHeight, height-ty);
         for (uint32_t tx=0; tx<width; tx+=tileMaxWidth)
         {
-            const uint32_t tileWidth       = std::min(tileMaxWidth, width-tx);
-            const uint32_t tileStride      = tileWidth + 2*radius;
-            const size_t   offsetToTopLeft = 2*radius * tileStride + radius; // Offset from beginning of buffer to top-left pixel
+            const uint32_t tileWidth           = std::min(tileMaxWidth, width-tx);
+            const uint32_t tileStride          = tileWidth + 2*radius;
+            const size_t   tileOffsetToTopLeft =   radius * tileStride + radius; // Offset from beginning of buffer to top-left pixel
+            const size_t   blurOffsetToTopLeft = 2*radius * tileStride + radius; // Offset from beginning of buffer to top-left pixel
 
             RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][bufferCapacity / sizeof(Float)]);
 
@@ -687,16 +690,16 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
             multiply(b2, b, b, tileWidth+2*radius, tileHeight+2*radius, tileStride);
             multiply(ab, a, b, tileWidth+2*radius, tileHeight+2*radius, tileStride);
 
-            Float* muA     = buffers[0] + offsetToTopLeft;
-            Float* muB     = buffers[1] + offsetToTopLeft;
-            Float* sigmaA2 = buffers[2] + offsetToTopLeft;
-            Float* sigmaB2 = buffers[3] + offsetToTopLeft;
-            Float* sigmaAB = buffers[4] + offsetToTopLeft;
-            gaussianBlur(muA,     tileStride, a  + offsetToTopLeft - radius*tileStride, tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(muB,     tileStride, b  + offsetToTopLeft - radius*tileStride, tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(sigmaA2, tileStride, a2 + offsetToTopLeft - radius*tileStride, tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(sigmaB2, tileStride, b2 + offsetToTopLeft - radius*tileStride, tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(sigmaAB, tileStride, ab + offsetToTopLeft - radius*tileStride, tileStride, tileWidth, tileHeight, kernel, radius);
+            Float* muA     = buffers[0] + blurOffsetToTopLeft;
+            Float* muB     = buffers[1] + blurOffsetToTopLeft;
+            Float* sigmaA2 = buffers[2] + blurOffsetToTopLeft;
+            Float* sigmaB2 = buffers[3] + blurOffsetToTopLeft;
+            Float* sigmaAB = buffers[4] + blurOffsetToTopLeft;
+            gaussianBlur(muA,     tileStride, a  + tileOffsetToTopLeft, tileStride, tileWidth, tileHeight, kernel, radius);
+            gaussianBlur(muB,     tileStride, b  + tileOffsetToTopLeft, tileStride, tileWidth, tileHeight, kernel, radius);
+            gaussianBlur(sigmaA2, tileStride, a2 + tileOffsetToTopLeft, tileStride, tileWidth, tileHeight, kernel, radius);
+            gaussianBlur(sigmaB2, tileStride, b2 + tileOffsetToTopLeft, tileStride, tileWidth, tileHeight, kernel, radius);
+            gaussianBlur(sigmaAB, tileStride, ab + tileOffsetToTopLeft, tileStride, tileWidth, tileHeight, kernel, radius);
 
             float* ssimTile = ssimMap + tx * ssimStep + ty * ssimStride;
             sum += sum_tile(tileWidth, tileHeight, tileStride, c1, c2, muA, muB, sigmaA2, sigmaB2, sigmaAB, ssimTile, ssimStep, ssimStride);
