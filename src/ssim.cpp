@@ -212,7 +212,7 @@ static void precompute_gaussian_kernel(Float kernel[], int radius, Float sigma) 
 }
 
 
-static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
+void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
 {
     assert(width  > 0);
     assert(height > 0);
@@ -519,8 +519,91 @@ double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, do
 }
 
 
+//=================================================================================================
+// Tile processing function
+
+
+struct GlobalParams
+{
+    // User-specified parameters
+    uint32_t        width;
+    uint32_t        height;
+    const uint8_t*  imgAData;
+    ptrdiff_t       imgAStep;
+    ptrdiff_t       imgAStride;
+    const uint8_t*  imgBData;
+    ptrdiff_t       imgBStep;
+    ptrdiff_t       imgBStride;
+    float*          ssimMap;
+    ptrdiff_t       ssimStep;
+    ptrdiff_t       ssimStride;
+
+    // Other parameters
+    uint32_t        tileMaxWidth;
+    uint32_t        tileMaxHeight;
+    uint32_t        horzMargin;
+    uint32_t        vertMargin;
+    uint32_t        rowAlignment;
+    size_t          bufferCapacity;
+    const Float*    gaussianKernel;
+    uint32_t        gaussianRadius;
+    double          c1;
+    double          c2;
+    GaussianBlurFct gaussianBlur;
+    SumTileFct      sumTile;
+};
+
+
+struct TileParams
+{
+    Float*   buffers[6];
+    uint32_t tileX;
+    uint32_t tileY;
+};
+
+
+static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NOEXCEPT
+{
+    const uint32_t tileWidth  = std::min(gp.tileMaxWidth,  gp.width  - tp.tileX);
+    const uint32_t tileHeight = std::min(gp.tileMaxHeight, gp.height - tp.tileY);
+    const uint32_t tileStride = ALIGN_UP(tileWidth + 2*gp.horzMargin, gp.rowAlignment);
+
+    // Compute offset between start of buffer and top-left pixel
+    const size_t offsetToTopLeft = gp.vertMargin * tileStride + ALIGN_UP(gp.horzMargin, gp.rowAlignment);
+    assert(offsetToTopLeft % gp.rowAlignment == 0);
+    assert(offsetToTopLeft + (tileStride * (tileHeight + gp.vertMargin)) - gp.horzMargin <= gp.bufferCapacity);
+
+    Float* a = tp.buffers[1] + offsetToTopLeft;
+    Float* b = tp.buffers[2] + offsetToTopLeft;
+    retrieve_tile(a, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgAData, gp.width, gp.height, gp.imgAStep, gp.imgAStride);
+    retrieve_tile(b, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgBData, gp.width, gp.height, gp.imgBStep, gp.imgBStride);
+
+    Float* a2 = tp.buffers[3] + offsetToTopLeft;
+    Float* b2 = tp.buffers[4] + offsetToTopLeft;
+    Float* ab = tp.buffers[5] + offsetToTopLeft;
+    multiply(a2, a, a, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
+    multiply(b2, b, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
+    multiply(ab, a, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
+
+    Float* muA     = tp.buffers[0] + offsetToTopLeft;
+    Float* muB     = tp.buffers[1] + offsetToTopLeft;
+    Float* sigmaA2 = tp.buffers[2] + offsetToTopLeft;
+    Float* sigmaB2 = tp.buffers[3] + offsetToTopLeft;
+    Float* sigmaAB = tp.buffers[4] + offsetToTopLeft;
+    gp.gaussianBlur(muA,     tileStride, a,  tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
+    gp.gaussianBlur(muB,     tileStride, b,  tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
+    gp.gaussianBlur(sigmaA2, tileStride, a2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
+    gp.gaussianBlur(sigmaB2, tileStride, b2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
+    gp.gaussianBlur(sigmaAB, tileStride, ab, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
+
+    float* ssimTile = gp.ssimMap + (tp.tileX * gp.ssimStep) + (tp.tileY * gp.ssimStride);
+    return gp.sumTile(tileWidth, tileHeight, tileStride, gp.c1, gp.c2, muA, muB, sigmaA2, sigmaB2, sigmaAB, ssimTile, gp.ssimStep, gp.ssimStride);
+};
+
+
 volatile GaussianBlurFct g_gaussianBlurFct = NULL;
 volatile SumTileFct      g_sumTileFct      = NULL;
+
 
 }} // namespace rmgr::ssim
 
@@ -593,11 +676,11 @@ static void init_x86() RMGR_NOEXCEPT
 float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
                                const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
                                const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                               float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
+                               float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags) RMGR_NOEXCEPT
 {
     GaussianBlurFct gaussianBlur = g_gaussianBlurFct;
     SumTileFct      sumTile      = g_sumTileFct;
-    if (gaussianBlur == NULL)
+    if (gaussianBlur==NULL || sumTile==NULL)
     {
 #if RMGR_ARCH_IS_X86_ANY
         init_x86();
@@ -628,65 +711,93 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
     }
 
     // Parameters of the gaussian blur
-    const unsigned radius = 5;
-    const Float    sigma  = 1.5;
-    Float kernelBuffer[(2*radius+1) * (2*radius+1)];
-    precompute_gaussian_kernel(kernelBuffer, radius, sigma);
+    const unsigned gaussianRadius = 5;
+    const Float    gaussianSigma  = 1.5;
+    Float kernelBuffer[(2*gaussianRadius+1) * (2*gaussianRadius+1)];
+    precompute_gaussian_kernel(kernelBuffer, gaussianRadius, gaussianSigma);
 
-    const Float* kernel = kernelBuffer + radius * (2*radius+1) + radius; // Center of the kernel
+    const Float* gaussianKernel = kernelBuffer + gaussianRadius * (2*gaussianRadius+1) + gaussianRadius; // Center of the kernel
 
     const uint32_t tileMaxWidth    = 256 / (sizeof(Float) / sizeof(float));
     const uint32_t tileMaxHeight   =  64;
-    const uint32_t horzMargin      = radius;
-    const uint32_t vertMargin      = 2*radius; // The blur routines require an extra write margin vertically (but the read margin is equal to the radius)
+    const uint32_t horzMargin      = gaussianRadius;
+    const uint32_t vertMargin      = 2 * gaussianRadius; // The blur routines require an extra write margin vertically (but the read margin is equal to the radius)
     const size_t   bufferAlignment = RMGR_SSIM_TILE_ALIGNMENT / sizeof(Float);
     const size_t   rowAlignment    = bufferAlignment;
     const uint32_t bufferWidth     = tileMaxWidth  + 2*horzMargin;
     const uint32_t bufferHeight    = tileMaxHeight + 2*vertMargin;
     const size_t   bufferStride    = ALIGN_UP(bufferWidth, rowAlignment);
-    const size_t   bufferCapacity  = ALIGN_UP(bufferStride*bufferHeight + bufferAlignment-1, bufferAlignment);
+    const size_t   bufferCapacity  = ALIGN_UP(bufferStride*bufferHeight + rowAlignment-1, bufferAlignment);
+
+    // Prepare global parameters
+    const GlobalParams gp =
+    {
+        // User-specified parameters
+        width,
+        height,
+        imgAData,
+        imgAStep,
+        imgAStride,
+        imgBData,
+        imgBStep,
+        imgBStride,
+        ssimMap,
+        ssimStep,
+        ssimStride,
+
+        // Other parameters
+        tileMaxWidth,
+        tileMaxHeight,
+        horzMargin,
+        vertMargin,
+        rowAlignment,
+        bufferCapacity,
+        gaussianKernel,
+        gaussianRadius,
+        c1,
+        c2,
+        gaussianBlur,
+        sumTile
+    };
 
     double sum = 0.0;
-    for (uint32_t ty=0; ty<height; ty+=tileMaxHeight)
+    if (flags & FLAG_HEAP_BUFFERS)
     {
-        const uint32_t tileHeight = std::min(tileMaxHeight, height-ty);
-        for (uint32_t tx=0; tx<width; tx+=tileMaxWidth)
+        Float* heapBuffer = static_cast<Float*>(alloc(6 * bufferCapacity * sizeof(Float), bufferAlignment));
+        if (heapBuffer == NULL)
+            return float(-ENOMEM);
+        for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
         {
-            const uint32_t tileWidth  = std::min(tileMaxWidth, width-tx);
-            const uint32_t tileStride = ALIGN_UP(tileWidth + 2*horzMargin, rowAlignment);
-
-            // Compute offset between start of buffer and top-left pixel
-            const size_t offsetToTopLeft = vertMargin * tileStride + ALIGN_UP(horzMargin, rowAlignment);
-            assert(offsetToTopLeft % rowAlignment == 0);
-            assert(offsetToTopLeft + tileStride*(tileHeight+vertMargin) - horzMargin <= bufferCapacity);
-
-            RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][bufferCapacity]);
-
-            Float* a = buffers[1] + offsetToTopLeft;
-            Float* b = buffers[2] + offsetToTopLeft;
-            retrieve_tile(a, tileWidth, tileHeight, tileStride, radius, tx, ty, imgAData, width, height, imgAStep, imgAStride);
-            retrieve_tile(b, tileWidth, tileHeight, tileStride, radius, tx, ty, imgBData, width, height, imgBStep, imgBStride);
-
-            Float* a2 = buffers[3] + offsetToTopLeft;
-            Float* b2 = buffers[4] + offsetToTopLeft;
-            Float* ab = buffers[5] + offsetToTopLeft;
-            multiply(a2, a, a, tileWidth, tileHeight, tileStride, radius);
-            multiply(b2, b, b, tileWidth, tileHeight, tileStride, radius);
-            multiply(ab, a, b, tileWidth, tileHeight, tileStride, radius);
-
-            Float* muA     = buffers[0] + offsetToTopLeft;
-            Float* muB     = buffers[1] + offsetToTopLeft;
-            Float* sigmaA2 = buffers[2] + offsetToTopLeft;
-            Float* sigmaB2 = buffers[3] + offsetToTopLeft;
-            Float* sigmaAB = buffers[4] + offsetToTopLeft;
-            gaussianBlur(muA,     tileStride, a,  tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(muB,     tileStride, b,  tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(sigmaA2, tileStride, a2, tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(sigmaB2, tileStride, b2, tileStride, tileWidth, tileHeight, kernel, radius);
-            gaussianBlur(sigmaAB, tileStride, ab, tileStride, tileWidth, tileHeight, kernel, radius);
-
-            float* ssimTile = ssimMap + tx * ssimStep + ty * ssimStride;
-            sum += sum_tile(tileWidth, tileHeight, tileStride, c1, c2, muA, muB, sigmaA2, sigmaB2, sigmaAB, ssimTile, ssimStep, ssimStride);
+            for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
+            {
+                const TileParams tp =
+                {
+                    {
+                        heapBuffer,
+                        heapBuffer + bufferCapacity,
+                        heapBuffer + bufferCapacity * 2,
+                        heapBuffer + bufferCapacity * 3,
+                        heapBuffer + bufferCapacity * 4,
+                        heapBuffer + bufferCapacity * 5,
+                    },
+                    tileX,
+                    tileY
+                };
+                sum += process_tile(tp, gp);
+            }
+        }
+        dealloc(heapBuffer);
+    }
+    else
+    {
+        RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][bufferCapacity]);
+        for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
+        {
+            for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
+            {
+                const TileParams tp = {{buffers[0],buffers[1],buffers[2],buffers[3],buffers[4],buffers[5]}, tileX, tileY};
+                sum += process_tile(tp, gp);
+            }
         }
     }
 

@@ -342,6 +342,9 @@ typedef void  (*DeallocFct)(void* address) RMGR_NOEXCEPT_TYPEDEF;
 int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
 
 
+const unsigned FLAG_HEAP_BUFFERS = 1; ///< Specify this flag to allocate work buffers on the heap rather than on the stack
+
+
 /**
  * @brief Computes the SSIM of a single channel of two images
  *
@@ -371,6 +374,7 @@ int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
  *                         This distance may be negative.
  * @param [in]  ssimStride The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately below it.
  *                         This distance may be negative.
+ * @param [in]  flags      A set of optional flags to tweak the behaviour of the function
  *
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
@@ -378,7 +382,7 @@ int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
 float compute_ssim(uint32_t width, uint32_t height,
                    const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
                    const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT;
+                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags=0) RMGR_NOEXCEPT;
 
 
 /**
@@ -404,15 +408,16 @@ float compute_ssim(uint32_t width, uint32_t height,
  *                        This distance may be negative.
  * @param [in] imgBStride For image B, the distance (in bytes) between a pixel and the one immediately below it.
  *                        This distance may be negative.
+ * @param [in] flags      A set of optional flags to tweak the behaviour of the function
  *
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
  */
 inline float compute_ssim(uint32_t width, uint32_t height,
                           const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                          const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride) RMGR_NOEXCEPT
+                          const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride, unsigned flags=0) RMGR_NOEXCEPT
 {
-    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, NULL, 0, 0);
+    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, NULL, 0, 0, flags);
 }
 
 
