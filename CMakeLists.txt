@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.8)
 project(rmgr-ssim CXX)
 
 option(RMGR_SSIM_USE_DOUBLE  "Whether to use double instead of float for increased precision (but slower)" OFF)
-option(RMGR_SSIM_BUILD_TESTS "Whether to build rmgr::ssim's unit tests" OFF)
+option(RMGR_SSIM_USE_OPENMP  "Whether to use OpenMP for multi-threaded processing"                         OFF)
+option(RMGR_SSIM_BUILD_TESTS "Whether to build rmgr::ssim's unit tests"                                    OFF)
 
 set(RMGR_SSIM_COMPILE_OPTIONS)
 set(RMGR_SSIM_DEFINITIONS)
@@ -12,6 +13,12 @@ if (RMGR_SSIM_USE_DOUBLE)
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_DOUBLE=1")
 else()
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_DOUBLE=0")
+endif()
+
+if (RMGR_SSIM_USE_OPENMP)
+    list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_OPENMP=1")
+else()
+    list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_OPENMP=0")
 endif()
 
 # Compiler-specific flags
@@ -30,6 +37,9 @@ if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
         set(RMGR_SSIM_AVX_FLAGS "-mavx")
         set(RMGR_SSIM_FMA_FLAGS "-mfma")
     endif()
+    if (RMGR_SSIM_USE_OPENMP)
+        set(RMGR_SSIM_OPENMP_FLAGS "-fopenmp")
+    endif()
 
 elseif (MSVC)
     list(APPEND RMGR_SSIM_COMPILE_OPTIONS "/W4")
@@ -47,6 +57,9 @@ elseif (MSVC)
         set(RMGR_SSIM_AVX_FLAGS "/arch:AVX")
         set(RMGR_SSIM_FMA_FLAGS "/arch:AVX")
     endif()
+    if (RMGR_SSIM_USE_OPENMP)
+        set(RMGR_SSIM_OPENMP_FLAGS "/openmp")
+    endif()
 endif()
 
 
@@ -57,6 +70,8 @@ set(RMGR_SSIM_FILES
     "src/ssim_sse.cpp"
     "src/ssim_avx.cpp"
 )
+
+set_source_files_properties("src/ssim.cpp" PROPERTIES COMPILE_OPTIONS "${RMGR_SSIM_OPENMP_FLAGS}")
 
 foreach (is sse avx)
     string(TOUPPER "${is}" ISU)

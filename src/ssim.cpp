@@ -26,10 +26,13 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
+    #include <omp.h>
+#endif
 
 
 #ifndef RMGR_SSIM_REPORT_ERROR
-    #ifdef _DEBUG
+    #ifndef NDEBUG
         #define RMGR_SSIM_REPORT_ERROR(...)  fprintf(stderr, __VA_ARGS__)
     #else
         #define RMGR_SSIM_REPORT_ERROR(...)
@@ -37,8 +40,12 @@
 #endif
 
 
+#ifndef RMGR_SSIM_CACHE_LINE_SIZE
+    #define RMGR_SSIM_CACHE_LINE_SIZE  64
+#endif
+
 #ifndef RMGR_SSIM_TILE_ALIGNMENT
-    #define RMGR_SSIM_TILE_ALIGNMENT  64
+    #define RMGR_SSIM_TILE_ALIGNMENT  RMGR_SSIM_CACHE_LINE_SIZE
 #endif
 
 #define ALIGN_UP(size, alignment)  (((size) + (alignment)-1) & ~size_t((alignment)-1))
@@ -601,6 +608,15 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
 };
 
 
+template<unsigned BC>
+double process_tile_on_stack(uint32_t tileX, uint32_t tileY, const GlobalParams& gp)
+{
+    RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][BC]);
+    const TileParams tp = {{buffers[0],buffers[1],buffers[2],buffers[3],buffers[4],buffers[5]}, tileX, tileY};
+    return process_tile(tp, gp);
+}
+
+
 volatile GaussianBlurFct g_gaussianBlurFct = NULL;
 volatile SumTileFct      g_sumTileFct      = NULL;
 
@@ -672,6 +688,7 @@ static void init_x86() RMGR_NOEXCEPT
 
 //=================================================================================================
 // Main function
+
 
 float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
                                const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
@@ -760,46 +777,98 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
         sumTile
     };
 
+#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
+    const int maxThreadcount = sizeof(void*) * CHAR_BIT; // Good heuristic
+    const int tileHorzCount  = (width  + tileMaxWidth  - 1) / tileMaxWidth;
+    const int tileVertCount  = (height + tileMaxHeight - 1) / tileMaxHeight;
+    const int tileCount      = tileHorzCount * tileVertCount;
+    const int threadCount    = (flags & FLAG_OPENMP) ? std::min(tileCount, omp_get_num_procs()) : 1;
+    struct ThreadSum
+    {
+        double value;
+        char   padding[RMGR_SSIM_CACHE_LINE_SIZE - sizeof(double)];
+    };
+    ThreadSum threadSums[maxThreadcount] = {};
+#else
+    const int threadCount = 1;
+    if (flags & FLAG_OPENMP)
+    {
+        RMGR_SSIM_REPORT_ERROR("[rmgr::ssim] FLAG_OPENMP was specified but OpenMP support was not enabled at build time\n");
+    }
+#endif
+
     double sum = 0.0;
     if (flags & FLAG_HEAP_BUFFERS)
     {
-        Float* heapBuffer = static_cast<Float*>(alloc(6 * bufferCapacity * sizeof(Float), bufferAlignment));
+        Float* heapBuffer = static_cast<Float*>(alloc(6 * bufferCapacity * threadCount * sizeof(Float), bufferAlignment));
         if (heapBuffer == NULL)
-            return float(-ENOMEM);
-        for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
+            return -ENOMEM;
+
+#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
+        if (flags & FLAG_OPENMP)
         {
-            for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
+            Float* buffers[maxThreadcount][6];
+            for (int threadNum=0; threadNum<threadCount; ++threadNum)
+                for (int i=0; i<6; ++i)
+                    buffers[threadNum][i] = heapBuffer + (6*threadNum + i) * bufferCapacity;
+
+            #pragma omp parallel for num_threads(threadCount)
+            for (int tileNum=0; tileNum<tileCount; ++tileNum)
             {
-                const TileParams tp =
+                const int      threadNum = omp_get_thread_num();
+                const uint32_t tileX     = (unsigned(tileNum) % tileHorzCount) * tileMaxWidth;
+                const uint32_t tileY     = (unsigned(tileNum) / tileHorzCount) * tileMaxHeight;
+                Float**        b         = buffers[threadNum];
+                const TileParams tp = {{b[0],b[1],b[2],b[3],b[4],b[5]}, tileX, tileY};
+                threadSums[threadNum].value += process_tile(tp, gp);
+            }
+        }
+        else
+#endif
+        {
+            for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
+            {
+                for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
                 {
-                    {
-                        heapBuffer,
-                        heapBuffer + bufferCapacity,
-                        heapBuffer + bufferCapacity * 2,
-                        heapBuffer + bufferCapacity * 3,
-                        heapBuffer + bufferCapacity * 4,
-                        heapBuffer + bufferCapacity * 5,
-                    },
-                    tileX,
-                    tileY
-                };
-                sum += process_tile(tp, gp);
+                    #define b(n) (heapBuffer + bufferCapacity * n)
+                    const TileParams tp = {{b(0),b(1),b(2),b(3),b(4),b(5)}, tileX, tileY};
+                    sum += process_tile(tp, gp);
+                    #undef b
+                }
             }
         }
         dealloc(heapBuffer);
     }
     else
     {
-        RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][bufferCapacity]);
-        for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
+#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
+        if (flags & FLAG_OPENMP)
         {
-            for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
+            #pragma omp parallel for num_threads(threadCount)
+            for (int tileNum=0; tileNum<tileCount; ++tileNum)
             {
-                const TileParams tp = {{buffers[0],buffers[1],buffers[2],buffers[3],buffers[4],buffers[5]}, tileX, tileY};
-                sum += process_tile(tp, gp);
+                const int      threadNum = omp_get_thread_num();
+                const uint32_t tileX     = (unsigned(tileNum) % tileHorzCount) * tileMaxWidth;
+                const uint32_t tileY     = (unsigned(tileNum) / tileHorzCount) * tileMaxHeight;
+                threadSums[threadNum].value += process_tile_on_stack<bufferCapacity>(tileX, tileY, gp);
             }
         }
+        else
+#endif
+        {
+            for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
+                for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
+                    sum += process_tile_on_stack<bufferCapacity>(tileX, tileY, gp);
+        }
     }
+
+#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
+    if (flags & FLAG_OPENMP)
+    {
+        for (int threadNum=0; threadNum<threadCount; ++threadNum)
+            sum += threadSums[threadNum].value;
+    }
+#endif
 
     return float(sum / double(width * height));
 }

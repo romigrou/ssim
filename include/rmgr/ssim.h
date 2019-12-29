@@ -343,6 +343,7 @@ int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
 
 
 const unsigned FLAG_HEAP_BUFFERS = 1; ///< Specify this flag to allocate work buffers on the heap rather than on the stack
+const unsigned FLAG_OPENMP       = 2; ///< Enable multi-threaded processing using OpenMP (support must have been enabled at compile time)
 
 
 /**
