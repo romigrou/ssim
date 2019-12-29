@@ -11,6 +11,28 @@ RMGR_WARNING_MSVC_DISABLE(4100) // unreferenced formal parameter
 RMGR_WARNING_POP()
 
 
+namespace rmgr { namespace ssim
+{
+    void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT;
+
+    double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, double c1, double c2,
+                    const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
+                    float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT;
+
+    extern volatile GaussianBlurFct g_gaussianBlurFct;
+    extern volatile SumTileFct      g_sumTileFct;
+}}
+
+
+enum Implementation
+{
+    IMPL_AUTO,
+    IMPL_GENERIC,
+    IMPL_SSE,
+    IMPL_AVX
+};
+
+
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
@@ -18,8 +40,41 @@ int main(int argc, char** argv)
 }
 
 
-void test_compute_ssim(const char* imgPath, const char* refPath, const float expectedSSIMs[], float tolerance=1e-4f)
+void test_compute_ssim(const char* imgPath, const char* refPath, Implementation impl, unsigned flags, const float expectedSSIMs[], float tolerance=1e-4f)
 {
+    // Set implementation
+    if (impl == IMPL_AUTO)
+    {
+        rmgr::ssim::g_gaussianBlurFct = NULL;
+        rmgr::ssim::g_sumTileFct      = NULL;
+    }
+    else if (impl == IMPL_GENERIC)
+    {
+        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::gaussian_blur;
+        rmgr::ssim::g_sumTileFct      = rmgr::ssim::sum_tile;
+    }
+    else if (impl == IMPL_SSE)
+    {
+#if RMGR_ARCH_IS_X86_ANY
+        ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::sse::g_gaussianBlurFct);
+        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::sse::g_gaussianBlurFct;
+        rmgr::ssim::g_sumTileFct      = rmgr::ssim::sum_tile;
+#else
+        ASSERT_TRUE(false);
+#endif
+    }
+    else if (impl == IMPL_AVX)
+    {
+#if RMGR_ARCH_IS_X86_ANY
+        ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::avx::g_gaussianBlurFct);
+        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::avx::g_gaussianBlurFct;
+        rmgr::ssim::g_sumTileFct      = rmgr::ssim::sum_tile;
+#else
+        ASSERT_TRUE(false);
+#endif
+    }
+    
+    // Load images
     int imgWidth, imgHeight, imgChannels;
     uint8_t* imgData = stbi_load(imgPath, &imgWidth, &imgHeight, &imgChannels, 0);
     ASSERT_NE(nullptr, imgData);
@@ -32,33 +87,36 @@ void test_compute_ssim(const char* imgPath, const char* refPath, const float exp
     ASSERT_EQ(refHeight,   imgHeight);
     ASSERT_EQ(refChannels, imgChannels);
 
+    // Compute SSIM for each channel
+    float* ssimMap = new float[imgWidth * imgHeight];
     for (int channel=0; channel<refChannels; ++channel)
     {
-        float ssim = rmgr::ssim::compute_ssim(refWidth, refHeight, refData+channel, refChannels, refWidth*refChannels, imgData+channel, imgChannels, imgWidth*imgChannels);
+        float ssim = rmgr::ssim::compute_ssim(refWidth, refHeight, refData+channel, refChannels, refWidth*refChannels, imgData+channel, imgChannels, imgWidth*imgChannels, ssimMap, 1, imgWidth, flags);
         EXPECT_NEAR(expectedSSIMs[channel], ssim, tolerance);
     }
+    delete[] ssimMap;
 
+    // Free images
     stbi_image_free(refData);
     stbi_image_free(imgData);
 }
 
 
-TEST(SSIM, einstein)
+static void test_einstein(Implementation impl, unsigned flags)
 {
     // These are the examples from the original SSIM page
 //    const float ssims[] = {1.0f, 0.988f, 0.913f, 0.840f, 0.694f, 0.662f};
     const float ssims[] = {1.000000f, 0.987346f, 0.901217f, 0.839534f, 0.702192f, 0.669938f};
 
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/einstein.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", ssims+0);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/meanshift.png", RMGR_SSIM_TESTS_DIR "/images/einstein.png", ssims+1);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/contrast.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", ssims+2);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/impulse.png",   RMGR_SSIM_TESTS_DIR "/images/einstein.png", ssims+3);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/blur.png",      RMGR_SSIM_TESTS_DIR "/images/einstein.png", ssims+4);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/jpg.png",       RMGR_SSIM_TESTS_DIR "/images/einstein.png", ssims+5);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/einstein.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+0);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/meanshift.png", RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+1);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/contrast.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+2);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/impulse.png",   RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+3);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/blur.png",      RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+4);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/jpg.png",       RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+5);
 }
 
-
-static void test_bbb(const char* stub, const float expectedSSIMs[][3])
+static void test_bbb(const char* stub, Implementation impl, unsigned flags, const float expectedSSIMs[][3])
 {
     char pngPath[256];
     snprintf(pngPath, sizeof(pngPath), "%s/images/%s.png", RMGR_SSIM_TESTS_DIR, stub);
@@ -68,12 +126,11 @@ static void test_bbb(const char* stub, const float expectedSSIMs[][3])
         char jpgPath[256];
         snprintf(jpgPath, sizeof(jpgPath), "%s/images/%s_%02d.jpg", RMGR_SSIM_TESTS_DIR, stub, jpgQuality);
         SCOPED_TRACE(jpgPath);
-        test_compute_ssim(jpgPath, pngPath, *expectedSSIMs++);
+        test_compute_ssim(jpgPath, pngPath, impl, flags, *expectedSSIMs++);
     }
 }
 
-
-TEST(SSIM, bbb360)
+static void test_bbb360(Implementation impl, unsigned flags)
 {
     static const float ssims[][3] =
     {
@@ -91,11 +148,11 @@ TEST(SSIM, bbb360)
         {0.996208f, 0.997984f, 0.993268f}  // q100
     };
 
-    test_bbb("big_buck_bunny_360_07806", ssims);
+    test_bbb("big_buck_bunny_360_07806", impl, flags, ssims);
 }
 
 
-TEST(SSIM, bbb1080)
+static void test_bbb1080(Implementation impl, unsigned flags)
 {
     static const float ssims[][3] =
     {
@@ -113,5 +170,32 @@ TEST(SSIM, bbb1080)
         {0.994402f, 0.996822f, 0.991326f}  // q100
     };
 
-    test_bbb("big_buck_bunny_1080_07806", ssims);
+    test_bbb("big_buck_bunny_1080_07806", impl, flags, ssims);
 }
+
+
+#define TEST_IMPL(name, impl, IMPL)                                                     \
+    TEST(name, impl##_stack)        {test_##name(IMPL, 0);}                             \
+    TEST(name, impl##_heap)         {test_##name(IMPL, rmgr::ssim::FLAG_HEAP_BUFFERS);} \
+    TEST(name, impl##_stack_openmp) {test_##name(IMPL, rmgr::ssim::FLAG_OPENMP);}       \
+    TEST(name, impl##_heap_openmp)  {test_##name(IMPL, rmgr::ssim::FLAG_HEAP_BUFFERS|rmgr::ssim::FLAG_OPENMP);}
+
+#define TEST_AUTO(name)     TEST_IMPL(name, auto,    IMPL_AUTO)
+#define TEST_GENERIC(name)  TEST_IMPL(name, generic, IMPL_GENERIC)
+
+#if RMGR_ARCH_IS_X86_ANY
+    #define TEST_X86(name)             \
+        TEST_IMPL(name, sse, IMPL_SSE) \
+        TEST_IMPL(name, avx, IMPL_AVX)
+#else
+    #define TEST_X86(name)
+#endif
+
+#define TEST_ALL(name) \
+    TEST_GENERIC(name) \
+    TEST_X86(name)     \
+    TEST_AUTO(name)
+
+TEST_ALL(einstein)
+TEST_ALL(bbb360)
+TEST_ALL(bbb1080)
