@@ -23,14 +23,21 @@
 
 #include <rmgr/ssim.h>
 
+#ifndef RMGR_SSIM_USE_DOUBLE
+    #define RMGR_SSIM_USE_DOUBLE  0
+#endif
+
 namespace rmgr { namespace ssim
 {
 
+#if RMGR_SSIM_USE_DOUBLE
+    typedef double Float;
+#else
+    typedef float  Float;
+#endif
 
-typedef float Float;
 
-
-typedef void (*GaussianBlurFct)(float* dest, ptrdiff_t destStride, const float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const float kernel[], int radius) RMGR_NOEXCEPT_TYPEDEF;
+typedef void (*GaussianBlurFct)(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT_TYPEDEF;
 
 typedef double (*SumTileFct)(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, double c1, double c2,
                              const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
