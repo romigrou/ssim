@@ -1,4 +1,5 @@
 #include <rmgr/ssim.h>
+#include "../src/ssim_internal.h"
 #include <gtest/gtest.h>
 
 
