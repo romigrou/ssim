@@ -68,9 +68,6 @@ foreach (is sse avx)
 endforeach()
 source_group("Source Files" FILES ${RMGR_SSIM_FILES})
 
-if (MSVC)
-    list(APPEND RMGR_SSIM_FILES "src/rmgr_ssim.natvis")
-endif()
 
 add_library(rmgr-ssim STATIC ${RMGR_SSIM_FILES})
 
