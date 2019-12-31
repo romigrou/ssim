@@ -871,7 +871,7 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
     double sum = 0.0;
     if (flags & FLAG_HEAP_BUFFERS)
     {
-        Float* heapBuffer = static_cast<Float*>(alloc(6 * bufferCapacity * threadCount * sizeof(Float), bufferAlignment));
+        Float* heapBuffer = static_cast<Float*>(alloc(6 * bufferCapacity * threadCount * sizeof(Float), RMGR_SSIM_TILE_ALIGNMENT));
         if (heapBuffer == NULL)
             return -ENOMEM;
 
