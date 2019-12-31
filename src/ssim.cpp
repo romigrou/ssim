@@ -725,6 +725,10 @@ static void init_x86() RMGR_NOEXCEPT
     const unsigned sseShift = 25; // SSE
 #endif
 
+    // Default to generic implementations
+    GaussianBlurFct gaussianBlur = gaussian_blur;
+    SumTileFct      sumTile      = sum_tile;
+
     // Detect machine's features
     int regs[4] = {};
     cpu_id(0, regs);
@@ -737,20 +741,21 @@ static void init_x86() RMGR_NOEXCEPT
 
         if (((ecx >> 28) & 1)!=0 && avx::g_gaussianBlurFct!=NULL)
         {
-            g_gaussianBlurFct = avx::g_gaussianBlurFct;
-            g_sumTileFct      = sum_tile;
+            gaussianBlur = avx::g_gaussianBlurFct;
+            sumTile      = sum_tile;
         }
         else if (((edx >> sseShift) & 1)!=0 && sse::g_gaussianBlurFct!=NULL)
         {
-            g_gaussianBlurFct = sse::g_gaussianBlurFct;
-            g_sumTileFct      = sum_tile;
-        }
-        else
-        {
-            g_gaussianBlurFct = gaussian_blur;
-            g_sumTileFct      = sum_tile;
+            gaussianBlur = sse::g_gaussianBlurFct;
+            sumTile      = sse::g_sumTileFct;
         }
     }
+
+    if (sumTile == NULL)
+        sumTile = sum_tile;
+
+    g_gaussianBlurFct = gaussianBlur;
+    g_sumTileFct      = sumTile;
 }
    
 
@@ -779,6 +784,15 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
         gaussianBlur = g_gaussianBlurFct;
         sumTile      = g_sumTileFct;
     }
+
+    // SIMD versions of sum_tile() only support ssimStep==1 and when not using double
+#if RMGR_SSIM_USE_DOUBLE
+    if (ssimMap != NULL)
+        sumTile = sum_tile;
+#else
+    if (ssimMap!=NULL && ssimStep!=1)
+        sumTile = sum_tile;
+#endif
 
     const double k1 = 0.01;
     const double k2 = 0.03;

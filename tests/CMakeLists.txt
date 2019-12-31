@@ -109,7 +109,7 @@ target_link_libraries(rmgr-ssim-tests PRIVATE
 
 target_include_directories(rmgr-ssim-tests PRIVATE ${GTEST_INCLUDE_DIRS})
 target_compile_options(rmgr-ssim-tests PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
-target_compile_definitions(rmgr-ssim-tests PRIVATE "RMGR_SSIM_TESTS_DIR=\"${RMGR_SSIM_TESTS_DIR}\"")
+target_compile_definitions(rmgr-ssim-tests PRIVATE "RMGR_SSIM_TESTS_DIR=\"${RMGR_SSIM_TESTS_DIR}\"" ${RMGR_SSIM_DEFINITIONS})
 
 if (MSVC)
     # Silence warnings
