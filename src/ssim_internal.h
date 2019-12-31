@@ -39,7 +39,7 @@ namespace rmgr { namespace ssim
 
 typedef void (*GaussianBlurFct)(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT_TYPEDEF;
 
-typedef double (*SumTileFct)(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, double c1, double c2,
+typedef double (*SumTileFct)(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
                              const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
                              float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT_TYPEDEF;
 

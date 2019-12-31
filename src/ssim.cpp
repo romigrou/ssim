@@ -480,11 +480,12 @@ static void retrieve_tile(Float* tile, uint32_t tileWidth, uint32_t tileHeight, 
 }
 
 
-double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, double c1, double c2,
+double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
                 const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
                 float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
-    double tileSum = 0.0f;
+    double tileSum = 0.0f; // The sum is always done on a double to increase precision
+
     for (uint32_t y=0; y<tileHeight; ++y)
     {
         const Float* muARow     = muATile     + y * tileStride;
@@ -493,26 +494,95 @@ double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, do
         const Float* sigmaB2Row = sigmaB2Tile + y * tileStride;
         const Float* sigmaABRow = sigmaABTile + y * tileStride;
         float*       ssimPtr    = ssimTile    + y * ssimStride;
-        for (uint32_t x=0; x<tileWidth; ++x)
+
+        int32_t x = tileWidth;
+        if ((x -= 4) >= 0)
         {
-            const double muA     = muARow[x];
-            const double muB     = muBRow[x];
-            const double muA2    = muA * muA;
-            const double muB2    = muB * muB;
-            const double muAB    = muA * muB;
-            const double sigmaA2 = sigmaA2Row[x] - muA2;
-            const double sigmaB2 = sigmaB2Row[x] - muB2;
-            const double sigmaAB = sigmaABRow[x] - muAB;
+            double rowSum1 = 0.0;
+            double rowSum2 = 0.0;
+            double rowSum3 = 0.0;
+            double rowSum4 = 0.0;
+            do
+            {
+                const Float muA_1     = *muARow++;
+                const Float muB_1     = *muBRow++;
+                const Float muA_2     = *muARow++;
+                const Float muB_2     = *muBRow++;
+                const Float muA_3     = *muARow++;
+                const Float muB_3     = *muBRow++;
+                const Float muA_4     = *muARow++;
+                const Float muB_4     = *muBRow++;
+                const Float muA2_1    = muA_1 * muA_1;
+                const Float muB2_1    = muB_1 * muB_1;
+                const Float muAB_1    = muA_1 * muB_1;
+                const Float muA2_2    = muA_2 * muA_2;
+                const Float muB2_2    = muB_2 * muB_2;
+                const Float muAB_2    = muA_2 * muB_2;
+                const Float muA2_3    = muA_3 * muA_3;
+                const Float muB2_3    = muB_3 * muB_3;
+                const Float muAB_3    = muA_3 * muB_3;
+                const Float muA2_4    = muA_4 * muA_4;
+                const Float muB2_4    = muB_4 * muB_4;
+                const Float muAB_4    = muA_4 * muB_4;
+                const Float sigmaA2_1 = *sigmaA2Row++ - muA2_1;
+                const Float sigmaB2_1 = *sigmaB2Row++ - muB2_1;
+                const Float sigmaAB_1 = *sigmaABRow++ - muAB_1;
+                const Float sigmaA2_2 = *sigmaA2Row++ - muA2_2;
+                const Float sigmaB2_2 = *sigmaB2Row++ - muB2_2;
+                const Float sigmaAB_2 = *sigmaABRow++ - muAB_2;
+                const Float sigmaA2_3 = *sigmaA2Row++ - muA2_3;
+                const Float sigmaB2_3 = *sigmaB2Row++ - muB2_3;
+                const Float sigmaAB_3 = *sigmaABRow++ - muAB_3;
+                const Float sigmaA2_4 = *sigmaA2Row++ - muA2_4;
+                const Float sigmaB2_4 = *sigmaB2Row++ - muB2_4;
+                const Float sigmaAB_4 = *sigmaABRow++ - muAB_4;
 
-            const double numerator1   = 2 * muAB    + c1;
-            const double numerator2   = 2 * sigmaAB + c2;
-            const double denominator1 = muA2 + muB2 + c1;
-            const double denominator2 = sigmaA2 + sigmaB2 + c2;
+                const Float numerator1   = (2 * muAB_1 + c1) * (2 * sigmaAB_1 + c2);
+                const Float numerator2   = (2 * muAB_2 + c1) * (2 * sigmaAB_2 + c2);
+                const Float numerator3   = (2 * muAB_3 + c1) * (2 * sigmaAB_3 + c2);
+                const Float numerator4   = (2 * muAB_4 + c1) * (2 * sigmaAB_4 + c2);
+                const Float denominator1 = (muA2_1 + muB2_1 + c1) * (sigmaA2_1 + sigmaB2_1 + c2);
+                const Float denominator2 = (muA2_2 + muB2_2 + c1) * (sigmaA2_2 + sigmaB2_2 + c2);
+                const Float denominator3 = (muA2_3 + muB2_3 + c1) * (sigmaA2_3 + sigmaB2_3 + c2);
+                const Float denominator4 = (muA2_4 + muB2_4 + c1) * (sigmaA2_4 + sigmaB2_4 + c2);
 
-            const double numerator   = numerator1 * numerator2;
-            const double denominator = denominator1 * denominator2;
+                const Float ssim1 = numerator1 / denominator1;
+                const Float ssim2 = numerator2 / denominator2;
+                const Float ssim3 = numerator3 / denominator3;
+                const Float ssim4 = numerator4 / denominator4;
 
-            const double ssim = numerator / denominator;
+                rowSum1 += ssim1;
+                rowSum2 += ssim2;
+                rowSum3 += ssim3;
+                rowSum4 += ssim4;
+
+                if (ssimTile != NULL)
+                {
+                    *ssimPtr = float(ssim1);  ssimPtr += ssimStep;
+                    *ssimPtr = float(ssim2);  ssimPtr += ssimStep;
+                    *ssimPtr = float(ssim3);  ssimPtr += ssimStep;
+                    *ssimPtr = float(ssim4);  ssimPtr += ssimStep;
+                }
+            }
+            while ((x -= 4) >= 0);
+            tileSum += (rowSum1 + rowSum2) + (rowSum3 + rowSum4);
+        }
+        x += 4;
+
+        while (--x >= 0)
+        {
+            const Float muA     = *muARow++;
+            const Float muB     = *muBRow++;
+            const Float muA2    = muA * muA;
+            const Float muB2    = muB * muB;
+            const Float muAB    = muA * muB;
+            const Float sigmaA2 = *sigmaA2Row++ - muA2;
+            const Float sigmaB2 = *sigmaB2Row++ - muB2;
+            const Float sigmaAB = *sigmaABRow++ - muAB;
+
+            const Float numerator   = (2 * muAB    + c1) * (2 * sigmaAB + c2);
+            const Float denominator = (muA2 + muB2 + c1) * (sigmaA2 + sigmaB2 + c2);
+            const Float ssim        = numerator / denominator;
             tileSum += ssim;
 
             if (ssimTile != NULL)
@@ -522,6 +592,7 @@ double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, do
             }
         }
     }
+
     return tileSum;
 }
 
@@ -554,8 +625,8 @@ struct GlobalParams
     size_t          bufferCapacity;
     const Float*    gaussianKernel;
     uint32_t        gaussianRadius;
-    double          c1;
-    double          c2;
+    Float           c1;
+    Float           c2;
     GaussianBlurFct gaussianBlur;
     SumTileFct      sumTile;
 };
@@ -712,8 +783,8 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
     const double k1 = 0.01;
     const double k2 = 0.03;
     const double L  = UINT8_MAX;
-    const double c1 = (k1 * L) * (k1 * L);
-    const double c2 = (k2 * L) * (k2 * L);
+    const Float  c1 = Float((k1 * L) * (k1 * L));
+    const Float  c2 = Float((k2 * L) * (k2 * L));
 
     if (imgAData==NULL || imgBData==NULL)
     {
