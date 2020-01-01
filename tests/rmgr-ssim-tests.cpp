@@ -12,10 +12,107 @@ RMGR_WARNING_MSVC_DISABLE(4100) // unreferenced formal parameter
 RMGR_WARNING_POP()
 
 
+enum Implementation
+{
+    IMPL_GENERIC,
+    IMPL_SSE,
+    IMPL_AVX,
+    IMPL_AUTO
+};
+
+
+const unsigned IMPL_COUNT = 4;
+
+
+struct PerfInfo
+{
+    uint64_t ticks;
+    uint64_t pixelCount;
+};
+
+
+static PerfInfo g_perfInfo[IMPL_COUNT][8] = {};
+
+
+#ifdef _WIN32
+    #include <windows.h>
+    #ifdef _MSC_VER
+        typedef unsigned __int64 uint64_t;
+    #endif
+
+    static inline uint64_t get_ticks() RMGR_NOEXCEPT
+    {
+        LARGE_INTEGER counter;
+        QueryPerformanceCounter(&counter);
+        return counter.QuadPart;
+    }
+
+    static uint64_t ticks_to_us(uint64_t counter) RMGR_NOEXCEPT
+    {
+        LARGE_INTEGER freq;
+        QueryPerformanceFrequency(&freq);
+        return (counter * 1000000) / freq.QuadPart;
+    }
+#else
+    #include <time.h>
+
+    static inline uint64_t get_ticks() RMGR_NOEXCEPT
+    {
+        timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return uint64_t(ts.tv_sec) * 1000000000u + ts.tv_nsec;
+    }
+
+    static uint64_t ticks_to_us(uint64_t counter) RMGR_NOEXCEPT
+    {
+        return counter / 1000u;
+    }
+#endif
+
+
 extern "C" int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    const int result = RUN_ALL_TESTS();
+
+    printf("\n"
+           "         ||=====================|=====================|=====================|=====================|\n"
+           "         ||     Without map     |      With map       |   OpenMp w/o map    |    OpenMp w/ map    |\n"
+           "|========||=====================|=====================|=====================|=====================|");
+    static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX"};
+    for (unsigned impl=0; impl<IMPL_COUNT; ++impl)
+    {
+        const PerfInfo* info = g_perfInfo[impl];
+
+        bool empty = true;
+        for (unsigned i=0; i<8u; ++i)
+            if (info[i].pixelCount != 0)
+                empty = false;
+        if (empty)
+            continue;
+
+        for (unsigned heap=0; heap<=1u; ++heap)
+        {
+            printf("\n|%-7s ||", (heap==0) ? implNames[impl] : "");
+            for (unsigned omp=0; omp<=1u; ++omp)
+            {
+                for (unsigned map=0; map<=1u; ++map)
+                {
+                    const unsigned index = omp*4 + heap*2 + map;
+                    {
+                        if (info[index].pixelCount == 0)
+                            printf("                     |");
+                        else
+                            printf(" %-6s %5.1f Mpix/s |", (heap)?"Heap:":"Stack:", double(info[index].pixelCount) / double(ticks_to_us(info[index].ticks)));
+                    }
+                }
+            }
+        }
+       printf("\n|--------||---------------------|---------------------|---------------------|---------------------|");
+    }
+    printf("\n\n");
+
+    return result;
 }
 
 
@@ -35,52 +132,7 @@ namespace rmgr { namespace ssim
 }}
 
 
-enum Implementation
-{
-    IMPL_AUTO,
-    IMPL_GENERIC,
-    IMPL_SSE,
-    IMPL_AVX
-};
-
-
-#ifdef _WIN32
-    #include <windows.h>
-    #ifdef _MSC_VER
-        typedef unsigned __int64 uint64_t;
-    #endif
-
-    static inline uint64_t get_perf_counter() RMGR_NOEXCEPT
-    {
-        LARGE_INTEGER counter;
-        QueryPerformanceCounter(&counter);
-        return counter.QuadPart;
-    }
-
-    static uint64_t perf_counter_to_us(uint64_t counter) RMGR_NOEXCEPT
-    {
-        LARGE_INTEGER freq;
-        QueryPerformanceFrequency(&freq);
-        return (counter * 1000000) / freq.QuadPart;
-    }
-#else
-    #include <time.h>
-
-    static inline uint64_t get_perf_counter() RMGR_NOEXCEPT
-    {
-        timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        return uint64_t(ts.tv_sec) * 1000000000u + ts.tv_nsec;
-    }
-
-    static uint64_t perf_counter_to_us(uint64_t counter) RMGR_NOEXCEPT
-    {
-        return counter / 1000u;
-    }
-#endif
-
-
-void test_compute_ssim(uint64_t& elapsed, uint64_t& pixelCount, const char* imgPath, const char* refPath, Implementation impl, unsigned flags, const float expectedSSIMs[], float tolerance=1e-4f)
+void test_compute_ssim(const char* imgPath, const char* refPath, Implementation impl, unsigned flags, bool buildSSimMap, const float expectedSSIMs[], float tolerance=1e-4f)
 {
     // Set implementation
     if (impl == IMPL_AUTO)
@@ -132,17 +184,25 @@ void test_compute_ssim(uint64_t& elapsed, uint64_t& pixelCount, const char* imgP
     ASSERT_EQ(refChannels, imgChannels);
 
     // Compute SSIM for each channel
-    float* ssimMap = new float[imgWidth * imgHeight];
+    float* ssimMap = NULL;
+    if (buildSSimMap)
+    {
+        ssimMap = new float[imgWidth * imgHeight];
+        ASSERT_NE(ssimMap, static_cast<float*>(NULL));
+    }
+
+    PerfInfo& perfInfo = g_perfInfo[impl][flags * 2 + !!buildSSimMap];
+
     for (int channel=0; channel<refChannels; ++channel)
     {
-        uint64_t t1 = get_perf_counter();
+        uint64_t t1 = get_ticks();
         float ssim = rmgr::ssim::compute_ssim(refWidth, refHeight, refData+channel, refChannels, refWidth*refChannels, imgData+channel, imgChannels, imgWidth*imgChannels, ssimMap, 1, imgWidth, flags);
-        uint64_t t2 = get_perf_counter();
-        elapsed += t2 - t1;
+        uint64_t t2 = get_ticks();
+        perfInfo.ticks      += t2 - t1;
+        perfInfo.pixelCount += imgWidth * imgHeight;
         EXPECT_NEAR(expectedSSIMs[channel], ssim, tolerance);
     }
 
-    pixelCount += imgWidth * imgHeight * imgChannels;
     delete[] ssimMap;
 
     // Free images
@@ -151,43 +211,37 @@ void test_compute_ssim(uint64_t& elapsed, uint64_t& pixelCount, const char* imgP
 }
 
 
-static void test_einstein(Implementation impl, unsigned flags)
+static void test_einstein(Implementation impl, unsigned flags, bool buildSsimMap)
 {
     // These are the examples from the original SSIM page
 //    const float ssims[] = {1.0f, 0.988f, 0.913f, 0.840f, 0.694f, 0.662f};
     const float ssims[] = {1.000000f, 0.987346f, 0.901217f, 0.839534f, 0.702192f, 0.669938f};
 
-    uint64_t elapsed    = 0;
-    uint64_t pixelCount = 0;
-    test_compute_ssim(elapsed, pixelCount, RMGR_SSIM_TESTS_DIR "/images/einstein.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+0);
-    test_compute_ssim(elapsed, pixelCount, RMGR_SSIM_TESTS_DIR "/images/meanshift.png", RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+1);
-    test_compute_ssim(elapsed, pixelCount, RMGR_SSIM_TESTS_DIR "/images/contrast.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+2);
-    test_compute_ssim(elapsed, pixelCount, RMGR_SSIM_TESTS_DIR "/images/impulse.png",   RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+3);
-    test_compute_ssim(elapsed, pixelCount, RMGR_SSIM_TESTS_DIR "/images/blur.png",      RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+4);
-    test_compute_ssim(elapsed, pixelCount, RMGR_SSIM_TESTS_DIR "/images/jpg.png",       RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, ssims+5);
-    double throughput = double(pixelCount) / double(perf_counter_to_us(elapsed));
-    printf("  Throughput: %3.1f Mpix/s\n", throughput);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/einstein.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+0);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/meanshift.png", RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+1);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/contrast.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+2);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/impulse.png",   RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+3);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/blur.png",      RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+4);
+    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/jpg.png",       RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+5);
 }
 
-static void test_bbb(const char* stub, Implementation impl, unsigned flags, const float expectedSSIMs[][3])
+
+static void test_bbb(const char* stub, Implementation impl, unsigned flags, bool buildSsimMap, const float expectedSSIMs[][3])
 {
     char pngPath[256];
     snprintf(pngPath, sizeof(pngPath), "%s/images/%s.png", RMGR_SSIM_TESTS_DIR, stub);
 
-    uint64_t elapsed    = 0;
-    uint64_t pixelCount = 0;
     for (int jpgQuality=0; jpgQuality<=100; jpgQuality+=10)
     {
         char jpgPath[256];
         snprintf(jpgPath, sizeof(jpgPath), "%s/images/%s_%02d.jpg", RMGR_SSIM_TESTS_DIR, stub, jpgQuality);
         SCOPED_TRACE(jpgPath);
-        test_compute_ssim(elapsed, pixelCount, jpgPath, pngPath, impl, flags, *expectedSSIMs++);
+        test_compute_ssim(jpgPath, pngPath, impl, flags, buildSsimMap, *expectedSSIMs++);
     }
-    double throughput = double(pixelCount) / double(perf_counter_to_us(elapsed));
-    printf("  Throughput: %3.1f Mpix/s\n", throughput);
 }
 
-static void test_bbb360(Implementation impl, unsigned flags)
+
+static void test_bbb360(Implementation impl, unsigned flags, bool buildSsimMap)
 {
     static const float ssims[][3] =
     {
@@ -205,11 +259,11 @@ static void test_bbb360(Implementation impl, unsigned flags)
         {0.996208f, 0.997984f, 0.993268f}  // q100
     };
 
-    test_bbb("big_buck_bunny_360_07806", impl, flags, ssims);
+    test_bbb("big_buck_bunny_360_07806", impl, flags, buildSsimMap, ssims);
 }
 
 
-static void test_bbb1080(Implementation impl, unsigned flags)
+static void test_bbb1080(Implementation impl, unsigned flags, bool buildSsimMap)
 {
     static const float ssims[][3] =
     {
@@ -227,20 +281,23 @@ static void test_bbb1080(Implementation impl, unsigned flags)
         {0.994402f, 0.996822f, 0.991326f}  // q100
     };
 
-    test_bbb("big_buck_bunny_1080_07806", impl, flags, ssims);
+    test_bbb("big_buck_bunny_1080_07806", impl, flags, buildSsimMap, ssims);
 }
 
 
+#define DO_TEST_IMPL(name, impl, IMPL, suffix, flags)                                                          \
+    TEST(name, impl##_stack##suffix)        {test_##name(IMPL, (flags),                               true);}  \
+    TEST(name, impl##_heap##suffix)         {test_##name(IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, true);}  \
+    TEST(name, impl##_stack_nomap##suffix)  {test_##name(IMPL, (flags),                               false);} \
+    TEST(name, impl##_heap_nomap##suffix)   {test_##name(IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, false);}
+
+
 #if RMGR_SSIM_USE_OPENMP
-    #define TEST_IMPL(name, impl, IMPL)                                                     \
-        TEST(name, impl##_stack)        {test_##name(IMPL, 0);}                             \
-        TEST(name, impl##_heap)         {test_##name(IMPL, rmgr::ssim::FLAG_HEAP_BUFFERS);} \
-        TEST(name, impl##_stack_openmp) {test_##name(IMPL, rmgr::ssim::FLAG_OPENMP);}       \
-        TEST(name, impl##_heap_openmp)  {test_##name(IMPL, rmgr::ssim::FLAG_HEAP_BUFFERS|rmgr::ssim::FLAG_OPENMP);}
+    #define TEST_IMPL(name, impl, IMPL)            \
+        DO_TEST_IMPL(name, impl, IMPL, ,        0) \
+        DO_TEST_IMPL(name, impl, IMPL, _openmp, rmgr::ssim::FLAG_OPENMP)
 #else
-    #define TEST_IMPL(name, impl, IMPL)                                                     \
-        TEST(name, impl##_stack)        {test_##name(IMPL, 0);}                             \
-        TEST(name, impl##_heap)         {test_##name(IMPL, rmgr::ssim::FLAG_HEAP_BUFFERS);}
+    #define TEST_IMPL(name, impl, IMPL)  DO_TEST_IMPL(name, impl, IMPL, , 0)
 #endif
 
 #define TEST_AUTO(name)     TEST_IMPL(name, auto,    IMPL_AUTO)
