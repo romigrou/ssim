@@ -46,7 +46,7 @@ typedef double (*SumTileFct)(uint32_t tileWidth, uint32_t tileHeight, uint32_t t
                              float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT_TYPEDEF;
 
 
-
+#if RMGR_ARCH_IS_X86_ANY
 namespace sse
 {
     extern const MultiplyFct     g_multiplyFct;
@@ -60,6 +60,14 @@ namespace avx
     extern const GaussianBlurFct g_gaussianBlurFct;
     extern const SumTileFct      g_sumTileFct;
 }
+
+namespace fma
+{
+    using avx::g_multiplyFct;
+    using avx::g_sumTileFct;
+    extern const GaussianBlurFct g_gaussianBlurFct;
+}
+#endif
 
 
 }} // namespace rmgr::ssim

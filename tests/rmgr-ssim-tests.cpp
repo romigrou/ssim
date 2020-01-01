@@ -37,11 +37,12 @@ enum Implementation
     IMPL_GENERIC,
     IMPL_SSE,
     IMPL_AVX,
+    IMPL_FMA,
     IMPL_AUTO
 };
 
 
-const unsigned IMPL_COUNT = 4;
+const unsigned IMPL_COUNT = 5;
 
 
 struct PerfInfo
@@ -99,7 +100,7 @@ extern "C" int main(int argc, char** argv)
            "         ||=====================|=====================|=====================|=====================|\n"
            "         ||     Without map     |      With map       |   OpenMp w/o map    |    OpenMp w/ map    |\n"
            "|========||=====================|=====================|=====================|=====================|");
-    static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX"};
+    static char const* const implNames[IMPL_COUNT] = {"Generic", "SSE", "AVX", "FMA", "Auto"};
     for (unsigned impl=0; impl<IMPL_COUNT; ++impl)
     {
         const PerfInfo* info = g_perfInfo[impl];
@@ -170,7 +171,9 @@ void test_compute_ssim(const char* imgPath, const char* refPath, Implementation 
     else if (impl == IMPL_SSE)
     {
 #if RMGR_ARCH_IS_X86_ANY
+        ASSERT_NE(static_cast<rmgr::ssim::MultiplyFct>(NULL),     rmgr::ssim::sse::g_multiplyFct);
         ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::sse::g_gaussianBlurFct);
+        ASSERT_NE(static_cast<rmgr::ssim::SumTileFct>(NULL),      rmgr::ssim::sse::g_sumTileFct);
         rmgr::ssim::g_multiplyFct     = rmgr::ssim::sse::g_multiplyFct;
         rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::sse::g_gaussianBlurFct;
         rmgr::ssim::g_sumTileFct      = rmgr::ssim::sse::g_sumTileFct;
@@ -181,10 +184,25 @@ void test_compute_ssim(const char* imgPath, const char* refPath, Implementation 
     else if (impl == IMPL_AVX)
     {
 #if RMGR_ARCH_IS_X86_ANY
+        ASSERT_NE(static_cast<rmgr::ssim::MultiplyFct>(NULL),     rmgr::ssim::avx::g_multiplyFct);
         ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::avx::g_gaussianBlurFct);
+        ASSERT_NE(static_cast<rmgr::ssim::SumTileFct>(NULL),      rmgr::ssim::avx::g_sumTileFct);
         rmgr::ssim::g_multiplyFct     = rmgr::ssim::avx::g_multiplyFct;
         rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::avx::g_gaussianBlurFct;
         rmgr::ssim::g_sumTileFct      = rmgr::ssim::avx::g_sumTileFct;
+#else
+        ASSERT_TRUE(false);
+#endif
+    }
+    else if (impl == IMPL_FMA)
+    {
+#if RMGR_ARCH_IS_X86_ANY
+        ASSERT_NE(static_cast<rmgr::ssim::MultiplyFct>(NULL),     rmgr::ssim::fma::g_multiplyFct);
+        ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::fma::g_gaussianBlurFct);
+        ASSERT_NE(static_cast<rmgr::ssim::SumTileFct>(NULL),      rmgr::ssim::fma::g_sumTileFct);
+        rmgr::ssim::g_multiplyFct     = rmgr::ssim::fma::g_multiplyFct;
+        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::fma::g_gaussianBlurFct;
+        rmgr::ssim::g_sumTileFct      = rmgr::ssim::fma::g_sumTileFct;
 #else
         ASSERT_TRUE(false);
 #endif
@@ -326,7 +344,8 @@ static void test_bbb1080(Implementation impl, unsigned flags, bool buildSsimMap)
 #if RMGR_ARCH_IS_X86_ANY
     #define TEST_X86(name)             \
         TEST_IMPL(name, sse, IMPL_SSE) \
-        TEST_IMPL(name, avx, IMPL_AVX)
+        TEST_IMPL(name, avx, IMPL_AVX) \
+        TEST_IMPL(name, fma, IMPL_FMA)
 #else
     #define TEST_X86(name)
 #endif

@@ -137,7 +137,7 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 
                 int32_t xd = width;
 
-                // 8x unrolled SSE loop
+                // 8x unrolled AVX loop
                 while ((xd -= 8*VEC_SIZE) >= 0)
                 {
                     const Vector sk0 = VMUL(VLOADU(s), k);  s += VEC_SIZE;

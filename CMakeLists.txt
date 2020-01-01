@@ -65,7 +65,7 @@ elseif (MSVC)
     if (RMGR_PREDEF_M_IX86 OR RMGR_PREDEF_M_AMD64)
         set(RMGR_SSIM_SSE_FLAGS "/arch:SSE2")
         set(RMGR_SSIM_AVX_FLAGS "/arch:AVX")
-        set(RMGR_SSIM_FMA_FLAGS "/arch:AVX")
+        set(RMGR_SSIM_FMA_FLAGS "/arch:AVX2")
     endif()
     if (RMGR_SSIM_USE_OPENMP)
         set(RMGR_SSIM_OPENMP_FLAGS "/openmp")
@@ -79,11 +79,12 @@ set(RMGR_SSIM_FILES
     "src/ssim_internal.h"
     "src/ssim_sse.cpp"
     "src/ssim_avx.cpp"
+    "src/ssim_fma.cpp"
 )
 
 set_source_files_properties("src/ssim.cpp" PROPERTIES COMPILE_OPTIONS "${RMGR_SSIM_OPENMP_FLAGS}")
 
-foreach (is sse avx)
+foreach (is sse avx fma)
     string(TOUPPER "${is}" ISU)
     if (DEFINED RMGR_SSIM_${ISU}_FLAGS)
         set_source_files_properties("src/ssim_${is}.cpp" PROPERTIES COMPILE_OPTIONS "${RMGR_SSIM_${ISU}_FLAGS}")

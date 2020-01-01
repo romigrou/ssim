@@ -741,8 +741,15 @@ static void init_x86() RMGR_NOEXCEPT
         const uint32_t ecx = regs[2];
         const uint32_t edx = regs[3];
 
-        if (((ecx >> 28) & 1)!=0 && avx::g_gaussianBlurFct!=NULL)
+        if (((ecx >> 12) & 1)!=0 && fma::g_gaussianBlurFct!=NULL)
         {
+            multiplyFct     = fma::g_multiplyFct;
+            gaussianBlurFct = fma::g_gaussianBlurFct;
+            sumTileFct      = fma::g_sumTileFct;
+        }
+        else if (((ecx >> 28) & 1)!=0 && avx::g_gaussianBlurFct!=NULL)
+        {
+            multiplyFct     = avx::g_multiplyFct;
             gaussianBlurFct = avx::g_gaussianBlurFct;
             sumTileFct      = avx::g_sumTileFct;
         }
