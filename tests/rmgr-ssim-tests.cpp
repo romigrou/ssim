@@ -21,12 +21,15 @@ extern "C" int main(int argc, char** argv)
 
 namespace rmgr { namespace ssim
 {
+    void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT;
+
     void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT;
 
     double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
                     const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
                     float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT;
 
+    extern volatile MultiplyFct     g_multiplyFct;
     extern volatile GaussianBlurFct g_gaussianBlurFct;
     extern volatile SumTileFct      g_sumTileFct;
 }}
@@ -82,11 +85,13 @@ void test_compute_ssim(uint64_t& elapsed, uint64_t& pixelCount, const char* imgP
     // Set implementation
     if (impl == IMPL_AUTO)
     {
+        rmgr::ssim::g_multiplyFct     = NULL;
         rmgr::ssim::g_gaussianBlurFct = NULL;
         rmgr::ssim::g_sumTileFct      = NULL;
     }
     else if (impl == IMPL_GENERIC)
     {
+        rmgr::ssim::g_multiplyFct     = rmgr::ssim::g_multiplyFct;
         rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::gaussian_blur;
         rmgr::ssim::g_sumTileFct      = rmgr::ssim::sum_tile;
     }
@@ -94,6 +99,7 @@ void test_compute_ssim(uint64_t& elapsed, uint64_t& pixelCount, const char* imgP
     {
 #if RMGR_ARCH_IS_X86_ANY
         ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::sse::g_gaussianBlurFct);
+        rmgr::ssim::g_multiplyFct     = rmgr::ssim::sse::g_multiplyFct;
         rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::sse::g_gaussianBlurFct;
         rmgr::ssim::g_sumTileFct      = rmgr::ssim::sse::g_sumTileFct;
 #else
@@ -104,6 +110,7 @@ void test_compute_ssim(uint64_t& elapsed, uint64_t& pixelCount, const char* imgP
     {
 #if RMGR_ARCH_IS_X86_ANY
         ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::avx::g_gaussianBlurFct);
+        rmgr::ssim::g_multiplyFct     = rmgr::ssim::avx::g_multiplyFct;
         rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::avx::g_gaussianBlurFct;
         rmgr::ssim::g_sumTileFct      = rmgr::ssim::avx::g_sumTileFct;
 #else
