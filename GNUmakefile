@@ -1,4 +1,4 @@
-# Copyright (c) 2017, Romain Bailly
+# Copyright (c) 2020, Romain Bailly
 #
 # This software is provided 'as-is', without any express or implied
 # warranty. In no event will the authors be held liable for any damages
