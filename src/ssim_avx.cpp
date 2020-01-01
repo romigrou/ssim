@@ -43,7 +43,9 @@ namespace rmgr { namespace ssim { namespace avx
     #define VLOADA(addr)   _mm256_load_pd((addr))
     #define VLOADU(addr)   _mm256_loadu_pd((addr))
     #define VADD(a,b)      _mm256_add_pd((a), (b))
+    #define VSUB(a,b)      _mm256_sub_pd((a), (b))
     #define VMUL(a,b)      _mm256_mul_pd((a), (b))
+    #define VDIV(a,b)      _mm256_div_pd((a), (b))
     #define VSET1(val)     _mm256_set1_pd(val)
 #else
     typedef __m256         Vector;
@@ -52,10 +54,15 @@ namespace rmgr { namespace ssim { namespace avx
     #define VLOADA(addr)   _mm256_load_ps((addr))
     #define VLOADU(addr)   _mm256_loadu_ps((addr))
     #define VADD(a,b)      _mm256_add_ps((a), (b))
+    #define VSUB(a,b)      _mm256_sub_ps((a), (b))
     #define VMUL(a,b)      _mm256_mul_ps((a), (b))
+    #define VDIV(a,b)      _mm256_div_ps((a), (b))
     #define VSET1(val)     _mm256_set1_ps(val)
 #endif
 
+
+//=================================================================================================
+// gaussian_blur()
 
 static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
 {
@@ -120,7 +127,10 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 #else
 
     // Faster version, but tailored for the radius==5 case
+    // Here too we don't care about buffer overrun as we know the buffer was allocated accordingly.
+
     assert(radius == 5);
+    (void)kernel;
 
     // The precomputed 21 unique values of the Gaussian kernel
     static RMGR_ALIGNED_VAR(64, const Float, k21[21 * VEC_SIZE]) =
@@ -231,6 +241,124 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 
 
 const GaussianBlurFct g_gaussianBlurFct = gaussian_blur;
+
+
+//=================================================================================================
+// sum_tile()
+
+double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
+                const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
+                float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
+{
+#if RMGR_SSIM_USE_DOUBLE
+    assert(ssimTile == NULL);
+    (void)ssimTile;
+    (void)ssimStep;
+    (void)ssimStride;
+#else
+    assert(ssimTile==NULL || ssimStep==1);
+    (void)ssimStep;
+#endif
+
+    const Vector vc1  = VSET1( c1);
+    const Vector vnc2 = VSET1(-c2); // Because we compute -sigma instead of sigma (but the numerator and denominator signs cancel out)
+
+    double tileSum = 0.0f; // The sum is always done on a double to increase precision
+
+    for (uint32_t y=0; y<tileHeight; ++y)
+    {
+        const Float* muARow     = muATile     + y * tileStride;
+        const Float* muBRow     = muBTile     + y * tileStride;
+        const Float* sigmaA2Row = sigmaA2Tile + y * tileStride;
+        const Float* sigmaB2Row = sigmaB2Tile + y * tileStride;
+        const Float* sigmaABRow = sigmaABTile + y * tileStride;
+#if !RMGR_SSIM_USE_DOUBLE
+        float*       ssimPtr    = ssimTile    + y * ssimStride;
+#endif
+
+        int32_t x = tileWidth;
+
+        // AVX loop
+        if ((x -= VEC_SIZE) >= 0)
+        {
+#if RMGR_SSIM_USE_DOUBLE
+            __m256d rowSum   = _mm256_set1_pd(0.0);
+#else
+            __m256d rowSumLo = _mm256_set1_pd(0.0);
+            __m256d rowSumHi = _mm256_set1_pd(0.0);
+#endif
+            do
+            {
+                const Vector muA         = VLOADA(muARow);  muARow+=VEC_SIZE;
+                const Vector muB         = VLOADA(muBRow);  muBRow+=VEC_SIZE;
+                const Vector muA2        = VMUL(muA, muA);
+                const Vector muB2        = VMUL(muB, muB);
+                const Vector muAB        = VMUL(muA, muB);
+                const Vector sigmaA2     = VSUB(muA2, VLOADA(sigmaA2Row));  sigmaA2Row+=VEC_SIZE;
+                const Vector sigmaB2     = VSUB(muB2, VLOADA(sigmaB2Row));  sigmaB2Row+=VEC_SIZE;
+                const Vector sigmaAB     = VSUB(muAB, VLOADA(sigmaABRow));  sigmaABRow+=VEC_SIZE;
+                const Vector numerator   = VMUL(VADD(VADD(muAB,muAB), vc1), VADD(VADD(sigmaAB,sigmaAB), vnc2));
+                const Vector denominator = VMUL(VADD(VADD(muA2,muB2), vc1), VADD(VADD(sigmaA2,sigmaB2), vnc2));
+                const Vector ssim        = VDIV(numerator, denominator);
+
+#if RMGR_SSIM_USE_DOUBLE
+                rowSum   = _mm256_add_pd(rowSum, ssim);
+#else
+                rowSumLo = _mm256_add_pd(rowSumLo, _mm256_cvtps_pd(_mm256_castps256_ps128(ssim)));
+                rowSumHi = _mm256_add_pd(rowSumHi, _mm256_cvtps_pd(_mm256_extractf128_ps(ssim, 1)));
+#endif
+
+#if !RMGR_SSIM_USE_DOUBLE
+                if (ssimTile != NULL)
+                {
+                    _mm256_storeu_ps(ssimPtr, ssim);
+                    ssimPtr += VEC_SIZE;
+                }
+#endif
+            }
+            while ((x -= VEC_SIZE) >= 0);
+
+#if !RMGR_SSIM_USE_DOUBLE
+            const __m256d rowSum  = _mm256_add_pd(rowSumLo, rowSumHi);
+#endif
+            const __m128d rowSum2 = _mm_add_pd(_mm256_castpd256_pd128(rowSum), _mm256_extractf128_pd(rowSum,1));
+            tileSum += _mm_cvtsd_f64(rowSum2);
+            tileSum += _mm_cvtsd_f64(_mm_shuffle_pd(rowSum2, rowSum2, _MM_SHUFFLE2(0,1)));
+        }
+        x += VEC_SIZE;
+
+        // Scalar epilogue
+        while (--x >= 0)
+        {
+            const Float muA     = *muARow++;
+            const Float muB     = *muBRow++;
+            const Float muA2    = muA * muA;
+            const Float muB2    = muB * muB;
+            const Float muAB    = muA * muB;
+            const Float sigmaA2 = *sigmaA2Row++ - muA2;
+            const Float sigmaB2 = *sigmaB2Row++ - muB2;
+            const Float sigmaAB = *sigmaABRow++ - muAB;
+
+            const Float numerator   = (2 * muAB    + c1) * (2 * sigmaAB + c2);
+            const Float denominator = (muA2 + muB2 + c1) * (sigmaA2 + sigmaB2 + c2);
+            const Float ssim        = numerator / denominator;
+            tileSum += ssim;
+
+#if !RMGR_SSIM_USE_DOUBLE
+            if (ssimTile != NULL)
+            {
+                *ssimPtr = float(ssim);
+                ssimPtr += ssimStep;
+            }
+#endif
+        }
+
+    }
+
+    return tileSum;
+}
+
+const SumTileFct g_sumTileFct = sum_tile;
 
 
 }}} // namespace rmgr::ssim::avx

@@ -52,6 +52,7 @@ namespace sse
 namespace avx
 {
     extern const GaussianBlurFct g_gaussianBlurFct;
+    extern const SumTileFct      g_sumTileFct;
 }
 
 

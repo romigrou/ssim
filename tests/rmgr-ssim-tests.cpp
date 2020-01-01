@@ -105,7 +105,7 @@ void test_compute_ssim(uint64_t& elapsed, uint64_t& pixelCount, const char* imgP
 #if RMGR_ARCH_IS_X86_ANY
         ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::avx::g_gaussianBlurFct);
         rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::avx::g_gaussianBlurFct;
-        rmgr::ssim::g_sumTileFct      = rmgr::ssim::sum_tile;
+        rmgr::ssim::g_sumTileFct      = rmgr::ssim::avx::g_sumTileFct;
 #else
         ASSERT_TRUE(false);
 #endif
