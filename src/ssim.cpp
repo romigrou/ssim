@@ -151,7 +151,7 @@ static inline size_t align_up(size_t size, size_t alignment) RMGR_NOEXCEPT
 /**
  * @brief Multiplies a tile by another tile
  */
-static void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT
+void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT
 {
     a       -= margin * stride + margin,
     b       -= margin * stride + margin,
@@ -627,6 +627,7 @@ struct GlobalParams
     uint32_t        gaussianRadius;
     Float           c1;
     Float           c2;
+    MultiplyFct     multiply;
     GaussianBlurFct gaussianBlur;
     SumTileFct      sumTile;
 };
@@ -659,9 +660,9 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
     Float* a2 = tp.buffers[3] + offsetToTopLeft;
     Float* b2 = tp.buffers[4] + offsetToTopLeft;
     Float* ab = tp.buffers[5] + offsetToTopLeft;
-    multiply(a2, a, a, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
-    multiply(b2, b, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
-    multiply(ab, a, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
+    gp.multiply(a2, a, a, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
+    gp.multiply(b2, b, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
+    gp.multiply(ab, a, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
 
     Float* muA     = tp.buffers[0] + offsetToTopLeft;
     Float* muB     = tp.buffers[1] + offsetToTopLeft;
@@ -688,6 +689,7 @@ double process_tile_on_stack(uint32_t tileX, uint32_t tileY, const GlobalParams&
 }
 
 
+volatile MultiplyFct     g_multiplyFct     = NULL;
 volatile GaussianBlurFct g_gaussianBlurFct = NULL;
 volatile SumTileFct      g_sumTileFct      = NULL;
 
@@ -725,6 +727,7 @@ static void init_x86() RMGR_NOEXCEPT
     const unsigned sseShift = 25; // SSE
 #endif
 
+    MultiplyFct     multiplyFct     = NULL;
     GaussianBlurFct gaussianBlurFct = NULL;
     SumTileFct      sumTileFct      = NULL;
 
@@ -745,12 +748,14 @@ static void init_x86() RMGR_NOEXCEPT
         }
         else if (((edx >> sseShift) & 1)!=0 && sse::g_gaussianBlurFct!=NULL)
         {
+            multiplyFct     = sse::g_multiplyFct;
             gaussianBlurFct = sse::g_gaussianBlurFct;
             sumTileFct      = sse::g_sumTileFct;
         }
     }
 
     // Fall back to generic implementation if needed
+    g_multiplyFct     = (multiplyFct     != NULL) ? multiplyFct     : multiply;
     g_gaussianBlurFct = (gaussianBlurFct != NULL) ? gaussianBlurFct : gaussian_blur;
     g_sumTileFct      = (sumTileFct      != NULL) ? sumTileFct      : sum_tile;
 }
@@ -768,6 +773,7 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
                                const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
                                float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags) RMGR_NOEXCEPT
 {
+    MultiplyFct     multiplyFct     = g_multiplyFct;
     GaussianBlurFct gaussianBlurFct = g_gaussianBlurFct;
     SumTileFct      sumTileFct      = g_sumTileFct;
     if (multiplyFct==NULL || gaussianBlurFct==NULL)
@@ -775,9 +781,11 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
 #if RMGR_ARCH_IS_X86_ANY
         init_x86();
 #else
+        g_multiplyFct     = multiply;
         g_gaussianBlurFct = gaussian_blur;
         g_sumTileFct      = sum_tile;
 #endif
+        multiplyFct     = g_multiplyFct;
         gaussianBlurFct = g_gaussianBlurFct;
         sumTileFct      = g_sumTileFct;
     }
@@ -855,6 +863,7 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
         gaussianRadius,
         c1,
         c2,
+        multiplyFct,
         gaussianBlurFct,
         sumTileFct
     };

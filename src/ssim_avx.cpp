@@ -24,7 +24,9 @@
 
 namespace rmgr { namespace ssim { namespace avx
 {
-    const GaussianBlurFct = NULL;
+    const MultiplyFct     g_multiplyFct     = NULL;
+    const GaussianBlurFct g_gaussianBlurFct = NULL;
+    const SumTileFct      g_sumTileFct      = NULL;
 }    
 
 #else
@@ -59,6 +61,45 @@ namespace rmgr { namespace ssim { namespace avx
     #define VDIV(a,b)      _mm256_div_ps((a), (b))
     #define VSET1(val)     _mm256_set1_ps(val)
 #endif
+
+
+//=================================================================================================
+// multiply()
+
+static void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT
+{
+
+    a       -= margin * stride + margin;
+    b       -= margin * stride + margin;
+    product -= margin * stride + margin;
+    for (uint32_t y=0; y<height+2*margin; ++y)
+    {
+        // Process left margin as scalar so as to deal with aligned pointers in the rest
+        for (uint32_t x=0; x<margin; ++x)
+            product[x] = a[x] * b[x];
+
+        // AVX loop. Note that we always process in batches of 4 because we know the buffer is large enough.
+        const Vector* va = reinterpret_cast<const Vector*>(a + margin);
+        const Vector* vb = reinterpret_cast<const Vector*>(b + margin);
+        Vector*       vp = reinterpret_cast<Vector*>(product + margin);
+        int32_t x = width + margin;
+        do
+        {
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+        }
+        while ((x -= 4*VEC_SIZE) >= 0);
+
+        a       += stride;
+        b       += stride;
+        product += stride;
+    }
+}
+
+
+const MultiplyFct g_multiplyFct = multiply;
 
 
 //=================================================================================================

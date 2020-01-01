@@ -33,6 +33,7 @@
 
 namespace rmgr { namespace ssim { namespace sse
 {
+    const MultiplyFct     g_multiplyFct     = NULL;
     const GaussianBlurFct g_gaussianBlurFct = NULL;
     const SumTileFct      g_sumTileFct      = NULL;
 }    
@@ -75,6 +76,49 @@ namespace rmgr { namespace ssim { namespace sse
 
 namespace rmgr { namespace ssim { namespace sse
 {
+
+//=================================================================================================
+// multiply()
+
+static void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT
+{
+
+    a       -= margin * stride + margin;
+    b       -= margin * stride + margin;
+    product -= margin * stride + margin;
+    for (uint32_t y=0; y<height+2*margin; ++y)
+    {
+        // Process left margin as scalar so as to deal with aligned pointers in the rest
+        for (uint32_t x=0; x<margin; ++x)
+            product[x] = a[x] * b[x];
+
+        // SSE loop. Note that we always process in batches of 4 because we know the buffer is large enough.
+        const Vector* va = reinterpret_cast<const Vector*>(a + margin);
+        const Vector* vb = reinterpret_cast<const Vector*>(b + margin);
+        Vector*       vp = reinterpret_cast<Vector*>(product + margin);
+        int32_t x = width + margin;
+        do
+        {
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+            *vp++ = VMUL(*va++, *vb++);
+        }
+        while ((x -= 8*VEC_SIZE) >= 0);
+
+        a       += stride;
+        b       += stride;
+        product += stride;
+    }
+}
+
+
+const MultiplyFct g_multiplyFct = multiply;
+
 
 //=================================================================================================
 // gaussian_blur()
@@ -295,9 +339,9 @@ double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Fl
         int32_t x = tileWidth;
 
         // SSE loop
-        __m128d rowSum = _mm_set1_pd(0.0);
         if ((x -= VEC_SIZE) >= 0)
         {
+            __m128d rowSum = _mm_set1_pd(0.0);
             do
             {
                 const Vector muA         = VLOADA(muARow);  muARow+=VEC_SIZE;
