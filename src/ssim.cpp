@@ -165,16 +165,6 @@ static inline void dealloc(void* address) RMGR_NOEXCEPT
 }
 
 
-static const unsigned CACHE_ALIGNMENT = 64;
-
-
-static inline size_t align_up(size_t size, size_t alignment) RMGR_NOEXCEPT
-{
-    assert(alignment!=0 && (alignment & (alignment-1))==0); // Power of 2
-    return (size + (alignment-1)) & ~(alignment-1);
-}
-
-
 //=================================================================================================
 // multiply()
 
