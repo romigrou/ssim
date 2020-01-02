@@ -32,16 +32,6 @@ RMGR_WARNING_MSVC_DISABLE(4100) // unreferenced formal parameter
 RMGR_WARNING_POP()
 
 
-enum Implementation
-{
-    IMPL_GENERIC,
-    IMPL_SSE,
-    IMPL_AVX,
-    IMPL_FMA,
-    IMPL_AUTO
-};
-
-
 const unsigned IMPL_COUNT = 5;
 
 
@@ -100,7 +90,7 @@ extern "C" int main(int argc, char** argv)
            "         ||=====================|=====================|=====================|=====================|\n"
            "         ||     Without map     |      With map       |   OpenMp w/o map    |    OpenMp w/ map    |\n"
            "|========||=====================|=====================|=====================|=====================|");
-    static char const* const implNames[IMPL_COUNT] = {"Generic", "SSE", "AVX", "FMA", "Auto"};
+    static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX", "FMA"};
     for (unsigned impl=0; impl<IMPL_COUNT; ++impl)
     {
         const PerfInfo* info = g_perfInfo[impl];
@@ -137,76 +127,10 @@ extern "C" int main(int argc, char** argv)
 }
 
 
-namespace rmgr { namespace ssim
+void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Implementation impl, unsigned flags, bool buildSSimMap, const float expectedSSIMs[], float tolerance=1e-4f)
 {
-    void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT;
-
-    void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT;
-
-    double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
-                    const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
-                    float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT;
-
-    extern volatile MultiplyFct     g_multiplyFct;
-    extern volatile GaussianBlurFct g_gaussianBlurFct;
-    extern volatile SumTileFct      g_sumTileFct;
-}}
-
-
-void test_compute_ssim(const char* imgPath, const char* refPath, Implementation impl, unsigned flags, bool buildSSimMap, const float expectedSSIMs[], float tolerance=1e-4f)
-{
-    // Set implementation
-    if (impl == IMPL_AUTO)
-    {
-        rmgr::ssim::g_multiplyFct     = NULL;
-        rmgr::ssim::g_gaussianBlurFct = NULL;
-        rmgr::ssim::g_sumTileFct      = NULL;
-    }
-    else if (impl == IMPL_GENERIC)
-    {
-        rmgr::ssim::g_multiplyFct     = rmgr::ssim::g_multiplyFct;
-        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::gaussian_blur;
-        rmgr::ssim::g_sumTileFct      = rmgr::ssim::sum_tile;
-    }
-    else if (impl == IMPL_SSE)
-    {
-#if RMGR_ARCH_IS_X86_ANY
-        ASSERT_NE(static_cast<rmgr::ssim::MultiplyFct>(NULL),     rmgr::ssim::sse::g_multiplyFct);
-        ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::sse::g_gaussianBlurFct);
-        ASSERT_NE(static_cast<rmgr::ssim::SumTileFct>(NULL),      rmgr::ssim::sse::g_sumTileFct);
-        rmgr::ssim::g_multiplyFct     = rmgr::ssim::sse::g_multiplyFct;
-        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::sse::g_gaussianBlurFct;
-        rmgr::ssim::g_sumTileFct      = rmgr::ssim::sse::g_sumTileFct;
-#else
-        ASSERT_TRUE(false);
-#endif
-    }
-    else if (impl == IMPL_AVX)
-    {
-#if RMGR_ARCH_IS_X86_ANY
-        ASSERT_NE(static_cast<rmgr::ssim::MultiplyFct>(NULL),     rmgr::ssim::avx::g_multiplyFct);
-        ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::avx::g_gaussianBlurFct);
-        ASSERT_NE(static_cast<rmgr::ssim::SumTileFct>(NULL),      rmgr::ssim::avx::g_sumTileFct);
-        rmgr::ssim::g_multiplyFct     = rmgr::ssim::avx::g_multiplyFct;
-        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::avx::g_gaussianBlurFct;
-        rmgr::ssim::g_sumTileFct      = rmgr::ssim::avx::g_sumTileFct;
-#else
-        ASSERT_TRUE(false);
-#endif
-    }
-    else if (impl == IMPL_FMA)
-    {
-#if RMGR_ARCH_IS_X86_ANY
-        ASSERT_NE(static_cast<rmgr::ssim::MultiplyFct>(NULL),     rmgr::ssim::fma::g_multiplyFct);
-        ASSERT_NE(static_cast<rmgr::ssim::GaussianBlurFct>(NULL), rmgr::ssim::fma::g_gaussianBlurFct);
-        ASSERT_NE(static_cast<rmgr::ssim::SumTileFct>(NULL),      rmgr::ssim::fma::g_sumTileFct);
-        rmgr::ssim::g_multiplyFct     = rmgr::ssim::fma::g_multiplyFct;
-        rmgr::ssim::g_gaussianBlurFct = rmgr::ssim::fma::g_gaussianBlurFct;
-        rmgr::ssim::g_sumTileFct      = rmgr::ssim::fma::g_sumTileFct;
-#else
-        ASSERT_TRUE(false);
-#endif
-    }
+    const unsigned supportedImpls = rmgr::ssim::select_impl(impl);
+    ASSERT_NE(0u, supportedImpls & (1 << impl)); // Fails if instruction set not supported or support not enabled at build time
     
     // Load images
     int imgWidth, imgHeight, imgChannels;
@@ -249,7 +173,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, Implementation 
 }
 
 
-static void test_einstein(Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_einstein(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
 {
     // These are the examples from the original SSIM page
 //    const float ssims[] = {1.0f, 0.988f, 0.913f, 0.840f, 0.694f, 0.662f};
@@ -264,7 +188,7 @@ static void test_einstein(Implementation impl, unsigned flags, bool buildSsimMap
 }
 
 
-static void test_bbb(const char* stub, Implementation impl, unsigned flags, bool buildSsimMap, const float expectedSSIMs[][3])
+static void test_bbb(const char* stub, rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap, const float expectedSSIMs[][3])
 {
     char pngPath[256];
     snprintf(pngPath, sizeof(pngPath), "%s/images/%s.png", RMGR_SSIM_TESTS_DIR, stub);
@@ -279,7 +203,7 @@ static void test_bbb(const char* stub, Implementation impl, unsigned flags, bool
 }
 
 
-static void test_bbb360(Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_bbb360(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
 {
     static const float ssims[][3] =
     {
@@ -301,7 +225,7 @@ static void test_bbb360(Implementation impl, unsigned flags, bool buildSsimMap)
 }
 
 
-static void test_bbb1080(Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_bbb1080(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
 {
     static const float ssims[][3] =
     {
@@ -324,10 +248,10 @@ static void test_bbb1080(Implementation impl, unsigned flags, bool buildSsimMap)
 
 
 #define DO_TEST_IMPL(name, impl, IMPL, suffix, flags)                                                          \
-    TEST(name, impl##_stack##suffix)        {test_##name(IMPL, (flags),                               true);}  \
-    TEST(name, impl##_heap##suffix)         {test_##name(IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, true);}  \
-    TEST(name, impl##_stack_nomap##suffix)  {test_##name(IMPL, (flags),                               false);} \
-    TEST(name, impl##_heap_nomap##suffix)   {test_##name(IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, false);}
+    TEST(name, impl##_stack##suffix)        {test_##name(rmgr::ssim::IMPL, (flags),                               true);}  \
+    TEST(name, impl##_heap##suffix)         {test_##name(rmgr::ssim::IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, true);}  \
+    TEST(name, impl##_stack_nomap##suffix)  {test_##name(rmgr::ssim::IMPL, (flags),                               false);} \
+    TEST(name, impl##_heap_nomap##suffix)   {test_##name(rmgr::ssim::IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, false);}
 
 
 #if RMGR_SSIM_USE_OPENMP

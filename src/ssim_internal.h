@@ -37,6 +37,19 @@ namespace rmgr { namespace ssim
 #endif
 
 
+// Flags intended for testing purposes only
+enum Implementation
+{
+    IMPL_AUTO    = 0, ///< Forces automatic detection to be performed
+    IMPL_GENERIC = 1, ///< Forces the generic implementation to be selected
+    IMPL_SSE     = 2, ///< Forces the SSE implementation to be selected
+    IMPL_AVX     = 3, ///< Forces the AVX implementation to be selected
+    IMPL_FMA     = 4  ///< Forces the FMA implementation to be selected
+};
+
+unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT;
+
+
 typedef void (*MultiplyFct)(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT_TYPEDEF;
 
 typedef void (*GaussianBlurFct)(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT_TYPEDEF;

@@ -53,6 +53,28 @@
 
 
 //=================================================================================================
+// cpu_id()
+
+#if RMGR_ARCH_IS_X86_ANY
+    #ifdef _MSC_VER
+        #include <intrin.h>
+        static inline void cpu_id(int leaf, int regs[4]) RMGR_NOEXCEPT
+        {
+            __cpuid(regs, leaf);
+        }
+    #elif RMGR_COMPILER_IS_GCC_OR_CLANG
+        #include <cpuid.h>
+        static inline void cpu_id(int leaf, int regs[4]) RMGR_NOEXCEPT
+        {
+            __get_cpuid(leaf, reinterpret_cast<unsigned*>(regs), reinterpret_cast<unsigned*>(regs+1), reinterpret_cast<unsigned*>(regs+2), reinterpret_cast<unsigned*>(regs+3));
+        }
+    #else
+        #error Unsupported compiler
+    #endif
+#endif
+
+
+//=================================================================================================
 // Allocator stuff
 
 #if defined(_MSC_VER)
@@ -121,6 +143,10 @@ namespace rmgr { namespace ssim
 {
 
 
+//=================================================================================================
+// Allocators
+
+
 static AllocFct   g_alloc   = default_alloc;
 static DeallocFct g_dealloc = default_dealloc;
 
@@ -149,10 +175,14 @@ static inline size_t align_up(size_t size, size_t alignment) RMGR_NOEXCEPT
 }
 
 
+//=================================================================================================
+// multiply()
+
+
 /**
  * @brief Multiplies a tile by another tile
  */
-void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT
+static void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT
 {
     a       -= margin * stride + margin,
     b       -= margin * stride + margin,
@@ -169,6 +199,10 @@ void multiply(Float* product, const Float* a, const Float* b, uint32_t width, ui
         product += stride;
     }
 }
+
+
+//=================================================================================================
+// gaussian_blur()
 
 
 static inline Float gaussian_kernel(int x, int y, Float sigma) RMGR_NOEXCEPT
@@ -220,7 +254,7 @@ static void precompute_gaussian_kernel(Float kernel[], int radius, Float sigma) 
 }
 
 
-void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
+static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
 {
     assert(width  > 0);
     assert(height > 0);
@@ -391,6 +425,10 @@ void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff
 }
 
 
+//=================================================================================================
+// retrieve_tile()
+
+
 /**
  * @brief Retrieves a tile of an image, converting it to `Float` on the fly
  *
@@ -481,9 +519,13 @@ static void retrieve_tile(Float* tile, uint32_t tileWidth, uint32_t tileHeight, 
 }
 
 
-double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
-                const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
-                float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
+//=================================================================================================
+// sum_tile()
+
+
+static double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
+                       const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
+                       float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
     double tileSum = 0.0f; // The sum is always done on a double to increase precision
 
@@ -599,7 +641,7 @@ double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Fl
 
 
 //=================================================================================================
-// Tile processing function
+// process_tile()
 
 
 struct GlobalParams
@@ -690,47 +732,34 @@ double process_tile_on_stack(uint32_t tileX, uint32_t tileY, const GlobalParams&
 }
 
 
+//=================================================================================================
+// init_impl()
+
+
 volatile MultiplyFct     g_multiplyFct     = NULL;
 volatile GaussianBlurFct g_gaussianBlurFct = NULL;
 volatile SumTileFct      g_sumTileFct      = NULL;
 
 
-}} // namespace rmgr::ssim
-
-
-//=================================================================================================
-// x86 init
-
-#if RMGR_ARCH_IS_X86_ANY
-
-#ifdef _MSC_VER
-    #include <intrin.h>
-    static inline void cpu_id(int leaf, int regs[4]) RMGR_NOEXCEPT
-    {
-        __cpuid(regs, leaf);
-    }
-#else
-    #include <cpuid.h>
-    static inline void cpu_id(int leaf, int regs[4]) RMGR_NOEXCEPT
-    {
-        __get_cpuid(leaf, reinterpret_cast<unsigned*>(regs), reinterpret_cast<unsigned*>(regs+1), reinterpret_cast<unsigned*>(regs+2), reinterpret_cast<unsigned*>(regs+3));
-    }
-#endif
-
-
-static void init_x86() RMGR_NOEXCEPT
+/**
+ * @brief Selects the most suitable implementation based on what's actually supported by the hardware
+ *
+ * @returns A bit mask of all the supported implementations
+ */
+unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
 {
-    using namespace rmgr::ssim;
-
-#if RMGR_SSIM_USE_DOUBLE
-    const unsigned sseShift = 26; // SSE2 (required for doubles)
-#else
-    const unsigned sseShift = 25; // SSE
-#endif
+    unsigned supportedImpls = (1 << IMPL_AUTO) | (1 << IMPL_GENERIC);
 
     MultiplyFct     multiplyFct     = NULL;
     GaussianBlurFct gaussianBlurFct = NULL;
     SumTileFct      sumTileFct      = NULL;
+
+#if RMGR_ARCH_IS_X86_ANY
+    #if RMGR_SSIM_USE_DOUBLE
+        const unsigned sseShift = 26; // SSE2 (required for doubles)
+    #else
+        const unsigned sseShift = 25; // SSE
+    #endif
 
     // Detect machine's features
     int regs[4] = {};
@@ -742,57 +771,56 @@ static void init_x86() RMGR_NOEXCEPT
         const uint32_t ecx = regs[2];
         const uint32_t edx = regs[3];
 
-        if (((ecx >> 12) & 1)!=0 && fma::g_gaussianBlurFct!=NULL)
-        {
-            multiplyFct     = fma::g_multiplyFct;
-            gaussianBlurFct = fma::g_gaussianBlurFct;
-            sumTileFct      = fma::g_sumTileFct;
-        }
-        else if (((ecx >> 28) & 1)!=0 && avx::g_gaussianBlurFct!=NULL)
-        {
-            multiplyFct     = avx::g_multiplyFct;
-            gaussianBlurFct = avx::g_gaussianBlurFct;
-            sumTileFct      = avx::g_sumTileFct;
-        }
-        else if (((edx >> sseShift) & 1)!=0 && sse::g_gaussianBlurFct!=NULL)
+        supportedImpls |= (((edx >> sseShift) & 1) && sse::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_SSE) : 0;
+        supportedImpls |= (((ecx >> 28)       & 1) && avx::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_AVX) : 0;
+        supportedImpls |= (((ecx >> 12)       & 1) && fma::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_FMA) : 0;
+
+        if ((supportedImpls & (1 << IMPL_SSE)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_SSE))
         {
             multiplyFct     = sse::g_multiplyFct;
             gaussianBlurFct = sse::g_gaussianBlurFct;
             sumTileFct      = sse::g_sumTileFct;
         }
+        if ((supportedImpls & (1 << IMPL_AVX)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_AVX))
+        {
+            multiplyFct     = avx::g_multiplyFct;
+            gaussianBlurFct = avx::g_gaussianBlurFct;
+            sumTileFct      = avx::g_sumTileFct;
+        }
+        if ((supportedImpls & (1 << IMPL_FMA)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_FMA))
+        {
+            multiplyFct     = fma::g_multiplyFct;
+            gaussianBlurFct = fma::g_gaussianBlurFct;
+            sumTileFct      = fma::g_sumTileFct;
+        }
     }
+#endif // RMGR_ARCH_IS_X86_ANY
 
     // Fall back to generic implementation if needed
     g_multiplyFct     = (multiplyFct     != NULL) ? multiplyFct     : multiply;
     g_gaussianBlurFct = (gaussianBlurFct != NULL) ? gaussianBlurFct : gaussian_blur;
     g_sumTileFct      = (sumTileFct      != NULL) ? sumTileFct      : sum_tile;
-}
-   
 
-#endif // RMGR_ARCH_IS_X86_ANY
+    return supportedImpls;
+}
 
 
 //=================================================================================================
 // Main function
 
 
-float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
-                               const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                               const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                               float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags) RMGR_NOEXCEPT
+float compute_ssim(uint32_t width, uint32_t height,
+                   const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
+                   const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
+                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags) RMGR_NOEXCEPT
 {
     MultiplyFct     multiplyFct     = g_multiplyFct;
     GaussianBlurFct gaussianBlurFct = g_gaussianBlurFct;
     SumTileFct      sumTileFct      = g_sumTileFct;
-    if (multiplyFct==NULL || gaussianBlurFct==NULL)
+    if (multiplyFct==NULL || gaussianBlurFct==NULL || multiplyFct==NULL)
     {
-#if RMGR_ARCH_IS_X86_ANY
-        init_x86();
-#else
-        g_multiplyFct     = multiply;
-        g_gaussianBlurFct = gaussian_blur;
-        g_sumTileFct      = sum_tile;
-#endif
+        select_impl(IMPL_AUTO);
+
         multiplyFct     = g_multiplyFct;
         gaussianBlurFct = g_gaussianBlurFct;
         sumTileFct      = g_sumTileFct;
@@ -971,3 +999,6 @@ float rmgr::ssim::compute_ssim(uint32_t width, uint32_t height,
 
     return float(sum / double(width * height));
 }
+
+
+}} // namespace rmgr::ssim

@@ -347,7 +347,7 @@ const unsigned FLAG_OPENMP       = 2; ///< Enable multi-threaded processing usin
 
 
 /**
- * @brief Computes the SSIM of a single channel of two images
+ * @brief Computes the SSIM of a single channel of two images and, optionally, the per-pixel SSIM map
  *
  * This function can handle almost any kind of image storage scheme (interleaved or planar, top-down or
  * bottom-up, row-major or column-major, ...). All you need is to specify the `step` and `stride` parameters
