@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
