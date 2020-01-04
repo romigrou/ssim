@@ -20,7 +20,7 @@
 
 #include "ssim_internal.h"
 
-#if !defined(__FMA__) && RMGR_COMPILER_IS_MSVC && defined(__AVX2__)
+#if !defined(__FMA__) && RMGR_COMPILER_IS_MSVC_AT_LEAST(18,0,0)
     #define __FMA__  1
 #endif
 

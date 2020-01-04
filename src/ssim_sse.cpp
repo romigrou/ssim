@@ -20,12 +20,15 @@
 
 #include "ssim_internal.h"
 
-#if RMGR_COMPILER_IS_MSVC && !defined(__SSE__)
+#if !defined(__SSE__) && RMGR_COMPILER_IS_MSVC_AT_LEAST(14,0,0)
     #define __SSE__  1
 #endif
 
-#if RMGR_COMPILER_IS_MSVC && !defined(__SSE2__)
+#if !defined(__SSE2__) && RMGR_COMPILER_IS_MSVC_AT_LEAST(14,0,0)
     #define __SSE2__  1
+    #if RMGR_COMPILER_IS_MSVC_LESS_THAN(15,0,0)
+        #define _mm_cvtsd_f64(v)  ((v).m128d_f64[0])
+    #endif
 #endif
 
 

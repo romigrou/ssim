@@ -23,7 +23,6 @@
 
 
 #include <cstddef>
-#include <cstdint>
 
 
 //=================================================================================================
@@ -140,6 +139,24 @@
         (    (major) <  RMGR_COMPILER_VERSION_MAJOR                                                \
          || ((major) == RMGR_COMPILER_VERSION_MAJOR && (    (minor) <  RMGR_COMPILER_VERSION_MINOR \
                                                         || ((minor) == RMGR_COMPILER_VERSION_MINOR && (patch)<=RMGR_COMPILER_VERSION_PATCH))))
+#endif
+#ifndef RMGR_COMPILER_IS_CLANG_AT_LEAST
+    #define RMGR_COMPILER_IS_CLANG_AT_LEAST(major,minor,patch)   (RMGR_COMPILER_IS_CLANG && RMGR_COMPILER_VERSION_IS_AT_LEAST((major),(minor),(patch)))
+#endif
+#ifndef RMGR_COMPILER_IS_MSVC_AT_LEAST
+    #define RMGR_COMPILER_IS_MSVC_AT_LEAST(major,minor,patch)    (RMGR_COMPILER_IS_MSVC  && RMGR_COMPILER_VERSION_IS_AT_LEAST((major),(minor),(patch)))
+#endif
+#ifndef RMGR_COMPILER_IS_GCC_AT_LEAST
+    #define RMGR_COMPILER_IS_GCC_AT_LEAST(major,minor,patch)     (RMGR_COMPILER_IS_GCC   && RMGR_COMPILER_VERSION_IS_AT_LEAST((major),(minor),(patch)))
+#endif
+#ifndef RMGR_COMPILER_IS_CLANG_LESS_THAN
+    #define RMGR_COMPILER_IS_CLANG_LESS_THAN(major,minor,patch)  (RMGR_COMPILER_IS_CLANG && !RMGR_COMPILER_VERSION_IS_AT_LEAST((major),(minor),(patch)))
+#endif
+#ifndef RMGR_COMPILER_IS_MSVC_LESS_THAN
+    #define RMGR_COMPILER_IS_MSVC_LESS_THAN(major,minor,patch)   (RMGR_COMPILER_IS_MSVC  && !RMGR_COMPILER_VERSION_IS_AT_LEAST((major),(minor),(patch)))
+#endif
+#ifndef RMGR_COMPILER_IS_GCC_LESS_THAN
+    #define RMGR_COMPILER_IS_GCC_LESS_THAN(major,minor,patch)    (RMGR_COMPILER_IS_GCC   && !RMGR_COMPILER_VERSION_IS_AT_LEAST((major),(minor),(patch)))
 #endif
 #ifndef RMGR_WARNING_PUSH
     #define RMGR_WARNING_PUSH()
@@ -319,6 +336,28 @@
  * @namespace rmgr::ssim
  * @brief Namespace that contains all things related to SSIM
  */
+
+
+// Workaround for MSVC prior to 2010 lacking stdint.h
+#if RMGR_COMPILER_IS_MSVC_LESS_THAN(16,0,0)
+namespace rmgr { namespace ssim
+{
+    typedef unsigned __int8  uint8_t;
+    typedef signed   __int32 int32_t;
+    typedef unsigned __int32 uint32_t;
+    typedef unsigned __int64 uint64_t;
+    const uint8_t UINT8_MAX = 255;
+}}
+#else
+#include <cstdint>
+namespace rmgr { namespace ssim
+{
+    typedef ::uint8_t  uint8_t;
+    typedef ::int32_t  int32_t;
+    typedef ::uint32_t uint32_t;
+    typedef ::uint64_t uint64_t;
+}}
+#endif
 
 
 namespace rmgr { namespace ssim

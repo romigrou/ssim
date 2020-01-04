@@ -20,6 +20,11 @@
 
 #include "ssim_internal.h"
 
+#if !defined(__AVX__) && RMGR_COMPILER_IS_MSVC_AT_LEAST(16,0,0)
+    #define __AVX__  1
+#endif
+
+
 #if !defined(__AVX__)
 
 namespace rmgr { namespace ssim { namespace avx

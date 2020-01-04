@@ -678,7 +678,7 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
 {
     const uint32_t tileWidth  = std::min(gp.tileMaxWidth,  gp.width  - tp.tileX);
     const uint32_t tileHeight = std::min(gp.tileMaxHeight, gp.height - tp.tileY);
-    const uint32_t tileStride = ALIGN_UP(tileWidth + 2*gp.horzMargin, gp.rowAlignment);
+    const uint32_t tileStride = uint32_t(ALIGN_UP(tileWidth + 2*gp.horzMargin, gp.rowAlignment));
 
     // Compute offset between start of buffer and top-left pixel
     const size_t offsetToTopLeft = gp.vertMargin * tileStride + ALIGN_UP(gp.horzMargin, gp.rowAlignment);

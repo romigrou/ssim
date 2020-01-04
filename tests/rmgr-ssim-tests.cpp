@@ -28,21 +28,16 @@
 #define STBI_ONLY_PNG
 RMGR_WARNING_PUSH()
 RMGR_WARNING_MSVC_DISABLE(4100) // unreferenced formal parameter
+RMGR_WARNING_MSVC_DISABLE(4244) // 'conversion' conversion from 'type1' to 'type2', possible loss of data
 #include "stb_image.h"
 RMGR_WARNING_POP()
 
+#if RMGR_COMPILER_IS_MSVC
+    #define snprintf  _snprintf_s
+#endif
+
 
 const unsigned IMPL_COUNT = 5;
-
-
-static const char g_imagesDir[] = {RMGR_SSIM_TESTS_IMAGES_DIR};
-
-
-struct PerfInfo
-{
-    uint64_t ticks;
-    uint64_t pixelCount;
-};
 
 
 static const char  g_defaultImagesDir[] = {RMGR_SSIM_TESTS_IMAGES_DIR};
@@ -51,18 +46,17 @@ static const char* g_imagesDir = g_defaultImagesDir;
 
 #ifdef _WIN32
     #include <windows.h>
-    #ifdef _MSC_VER
-        typedef unsigned __int64 uint64_t;
-    #endif
 
-    static inline uint64_t get_ticks() RMGR_NOEXCEPT
+    typedef rmgr::ssim::uint64_t Ticks;
+
+    static inline Ticks get_ticks() RMGR_NOEXCEPT
     {
         LARGE_INTEGER counter;
         QueryPerformanceCounter(&counter);
         return counter.QuadPart;
     }
 
-    static uint64_t ticks_to_us(uint64_t counter) RMGR_NOEXCEPT
+    static Ticks ticks_to_us(Ticks counter) RMGR_NOEXCEPT
     {
         LARGE_INTEGER freq;
         QueryPerformanceFrequency(&freq);
@@ -71,18 +65,30 @@ static const char* g_imagesDir = g_defaultImagesDir;
 #else
     #include <time.h>
 
-    static inline uint64_t get_ticks() RMGR_NOEXCEPT
+    typedef rmgr::ssim::uint64_t Ticks;
+
+    static inline Ticks get_ticks() RMGR_NOEXCEPT
     {
         timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
-        return uint64_t(ts.tv_sec) * 1000000000u + ts.tv_nsec;
+        return Ticks(ts.tv_sec) * 1000000000u + ts.tv_nsec;
     }
 
-    static uint64_t ticks_to_us(uint64_t counter) RMGR_NOEXCEPT
+    static Ticks ticks_to_us(Ticks counter) RMGR_NOEXCEPT
     {
         return counter / 1000u;
     }
 #endif
+
+
+struct PerfInfo
+{
+    Ticks         ticks;
+    unsigned long pixelCount;
+};
+
+
+static PerfInfo g_perfInfo[IMPL_COUNT][8] = {};
 
 
 extern "C" int main(int argc, char** argv)
@@ -139,14 +145,16 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
     const unsigned supportedImpls = rmgr::ssim::select_impl(impl);
     ASSERT_NE(0u, supportedImpls & (1 << impl)); // Fails if instruction set not supported or support not enabled at build time
     
+    typedef rmgr::ssim::uint8_t uint8_t;
+
     // Load images
     int imgWidth, imgHeight, imgChannels;
     uint8_t* imgData = stbi_load(imgPath, &imgWidth, &imgHeight, &imgChannels, 0);
-    ASSERT_NE(nullptr, imgData);
+    ASSERT_NE(static_cast<uint8_t*>(NULL), imgData);
 
     int refWidth, refHeight, refChannels;
     uint8_t* refData = stbi_load(refPath, &refWidth, &refHeight, &refChannels, 0);
-    ASSERT_NE(nullptr, refData);
+    ASSERT_NE(static_cast<uint8_t*>(NULL), refData);
 
     ASSERT_EQ(refWidth,    imgWidth);
     ASSERT_EQ(refHeight,   imgHeight);
@@ -164,9 +172,9 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
 
     for (int channel=0; channel<refChannels; ++channel)
     {
-        uint64_t t1 = get_ticks();
+        Ticks t1 = get_ticks();
         float ssim = rmgr::ssim::compute_ssim(refWidth, refHeight, refData+channel, refChannels, refWidth*refChannels, imgData+channel, imgChannels, imgWidth*imgChannels, ssimMap, 1, imgWidth, flags);
-        uint64_t t2 = get_ticks();
+        Ticks t2 = get_ticks();
         perfInfo.ticks      += t2 - t1;
         perfInfo.pixelCount += imgWidth * imgHeight;
         EXPECT_NEAR(expectedSSIMs[channel], ssim, tolerance);
