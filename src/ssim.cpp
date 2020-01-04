@@ -30,6 +30,10 @@
 #if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
     #include <omp.h>
 #endif
+#if RMGR_ARCH_IS_ARM_ANY && defined(__linux__)
+    #include <asm/hwcap.h>
+    #include <sys/auxv.h>
+#endif
 
 
 #ifndef RMGR_SSIM_REPORT_ERROR
@@ -784,6 +788,22 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
             sumTileFct      = fma::g_sumTileFct;
         }
     }
+#elif RMGR_ARCH_IS_ARM_ANY
+    #ifdef __linux__
+        const long hwcap = getauxval(AT_HWCAP);
+        #if RMGR_ARCH_IS_ARM_64
+            supportedImpls |= (hwcap & HWCAP_ASIMD) ? (1 << IMPL_NEON) : 0;
+        #else
+            supportedImpls |= (hwcap & HWCAP_NEON)  ? (1 << IMPL_NEON) : 0;
+        #endif
+    #endif
+
+    if ((supportedImpls & (1 << IMPL_NEON)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_NEON))
+    {
+        multiplyFct     = neon::g_multiplyFct;
+        gaussianBlurFct = neon::g_gaussianBlurFct;
+    }
+
 #endif // RMGR_ARCH_IS_X86_ANY
 
     // Fall back to generic implementation if needed

@@ -37,7 +37,7 @@ RMGR_WARNING_POP()
 #endif
 
 
-const unsigned IMPL_COUNT = 5;
+const unsigned IMPL_COUNT = 6;
 
 
 static const char  g_defaultImagesDir[] = {RMGR_SSIM_TESTS_IMAGES_DIR};
@@ -103,7 +103,7 @@ extern "C" int main(int argc, char** argv)
            "         ||=====================|=====================|=====================|=====================|\n"
            "         ||     Without map     |      With map       |   OpenMp w/o map    |    OpenMp w/ map    |\n"
            "|========||=====================|=====================|=====================|=====================|");
-    static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX", "FMA"};
+    static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX", "FMA", "Neon"};
     for (unsigned impl=0; impl<IMPL_COUNT; ++impl)
     {
         const PerfInfo* info = g_perfInfo[impl];
@@ -274,7 +274,7 @@ static void test_bbb1080(rmgr::ssim::Implementation impl, unsigned flags, bool b
 }
 
 
-#define DO_TEST_IMPL(name, impl, IMPL, suffix, flags)                                                          \
+#define DO_TEST_IMPL(name, impl, IMPL, suffix, flags)                                                                      \
     TEST(name, impl##_stack##suffix)        {test_##name(rmgr::ssim::IMPL, (flags),                               true);}  \
     TEST(name, impl##_heap##suffix)         {test_##name(rmgr::ssim::IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, true);}  \
     TEST(name, impl##_stack_nomap##suffix)  {test_##name(rmgr::ssim::IMPL, (flags),                               false);} \
@@ -301,9 +301,16 @@ static void test_bbb1080(rmgr::ssim::Implementation impl, unsigned flags, bool b
     #define TEST_X86(name)
 #endif
 
+#if RMGR_ARCH_IS_ARM_ANY
+    #define TEST_ARM(name)  TEST_IMPL(name, neon, IMPL_NEON)
+#else
+    #define TEST_ARM(name)
+#endif
+
 #define TEST_ALL(name) \
     TEST_GENERIC(name) \
     TEST_X86(name)     \
+    TEST_ARM(name)     \
     TEST_AUTO(name)
 
 TEST_ALL(einstein)

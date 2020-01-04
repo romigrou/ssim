@@ -40,11 +40,12 @@ namespace rmgr { namespace ssim
 // Flags intended for testing purposes only
 enum Implementation
 {
-    IMPL_AUTO    = 0, ///< Forces automatic detection to be performed
-    IMPL_GENERIC = 1, ///< Forces the generic implementation to be selected
-    IMPL_SSE     = 2, ///< Forces the SSE implementation to be selected
-    IMPL_AVX     = 3, ///< Forces the AVX implementation to be selected
-    IMPL_FMA     = 4  ///< Forces the FMA implementation to be selected
+    IMPL_AUTO    = 0, ///< Automatically select the best implementation
+    IMPL_GENERIC = 1, ///< Use the generic implementation
+    IMPL_SSE     = 2, ///< Use the SSE implementation if available
+    IMPL_AVX     = 3, ///< Use the AVX implementation if available
+    IMPL_FMA     = 4, ///< Use the FMA implementation if available
+    IMPL_NEON    = 5  ///< Use the Neon (or ASIMD) implementation if available
 };
 
 unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT;
@@ -79,6 +80,14 @@ namespace fma
     using avx::g_multiplyFct;
     using avx::g_sumTileFct;
     extern const GaussianBlurFct g_gaussianBlurFct;
+}
+
+#elif RMGR_ARCH_IS_ARM_ANY
+namespace neon
+{
+    extern const MultiplyFct     g_multiplyFct;
+    extern const GaussianBlurFct g_gaussianBlurFct;
+    extern const SumTileFct      g_sumTileFct;
 }
 #endif
 
