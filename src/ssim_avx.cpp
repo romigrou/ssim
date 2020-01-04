@@ -27,7 +27,7 @@ namespace rmgr { namespace ssim { namespace avx
     const MultiplyFct     g_multiplyFct     = NULL;
     const GaussianBlurFct g_gaussianBlurFct = NULL;
     const SumTileFct      g_sumTileFct      = NULL;
-}    
+}}}
 
 #else
 

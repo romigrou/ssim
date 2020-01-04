@@ -33,7 +33,7 @@
 namespace rmgr { namespace ssim { namespace fma
 {
     const GaussianBlurFct g_gaussianBlurFct = NULL;
-}    
+}}}
 
 #else
 
