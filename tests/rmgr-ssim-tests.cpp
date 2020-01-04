@@ -35,6 +35,9 @@ RMGR_WARNING_POP()
 const unsigned IMPL_COUNT = 5;
 
 
+static const char g_imagesDir[] = {RMGR_SSIM_TESTS_IMAGES_DIR};
+
+
 struct PerfInfo
 {
     uint64_t ticks;
@@ -176,27 +179,39 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
 static void test_einstein(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
 {
     // These are the examples from the original SSIM page
-//    const float ssims[] = {1.0f, 0.988f, 0.913f, 0.840f, 0.694f, 0.662f};
-    const float ssims[] = {1.000000f, 0.987346f, 0.901217f, 0.839534f, 0.702192f, 0.669938f};
+//    static const float ssims[] = {1.0f, 0.988f, 0.913f, 0.840f, 0.694f, 0.662f};
+    static const float ssims[] = {1.000000f, 0.987346f, 0.901217f, 0.839534f, 0.702192f, 0.669938f};
+    static char const* const files[] =
+    {
+        "einstein.png",
+        "meanshift.png",
+        "contrast.png",
+        "impulse.png",
+        "blur.png",
+        "jpg.png"
+    };
 
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/einstein.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+0);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/meanshift.png", RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+1);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/contrast.png",  RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+2);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/impulse.png",   RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+3);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/blur.png",      RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+4);
-    test_compute_ssim(RMGR_SSIM_TESTS_DIR "/images/jpg.png",       RMGR_SSIM_TESTS_DIR "/images/einstein.png", impl, flags, buildSsimMap, ssims+5);
+    char refPath[256];
+    snprintf(refPath, sizeof(refPath), "%s/%s", g_imagesDir, files[0]);
+    const size_t fileCount = sizeof(files) / sizeof(files[0]);
+    for (size_t i=0; i<fileCount; ++i)
+    {
+        char imgPath[256];
+        snprintf(imgPath, sizeof(imgPath), "%s/%s", g_imagesDir, files[i]);
+        test_compute_ssim(imgPath, refPath, impl, flags, buildSsimMap, ssims+i);
+    }
 }
 
 
 static void test_bbb(const char* stub, rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap, const float expectedSSIMs[][3])
 {
     char pngPath[256];
-    snprintf(pngPath, sizeof(pngPath), "%s/images/%s.png", RMGR_SSIM_TESTS_DIR, stub);
+    snprintf(pngPath, sizeof(pngPath), "%s/%s.png", g_imagesDir, stub);
 
     for (int jpgQuality=0; jpgQuality<=100; jpgQuality+=10)
     {
         char jpgPath[256];
-        snprintf(jpgPath, sizeof(jpgPath), "%s/images/%s_%02d.jpg", RMGR_SSIM_TESTS_DIR, stub, jpgQuality);
+        snprintf(jpgPath, sizeof(jpgPath), "%s/%s_%02d.jpg", g_imagesDir, stub, jpgQuality);
         SCOPED_TRACE(jpgPath);
         test_compute_ssim(jpgPath, pngPath, impl, flags, buildSsimMap, *expectedSSIMs++);
     }
