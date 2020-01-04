@@ -45,7 +45,8 @@ struct PerfInfo
 };
 
 
-static PerfInfo g_perfInfo[IMPL_COUNT][8] = {};
+static const char  g_defaultImagesDir[] = {RMGR_SSIM_TESTS_IMAGES_DIR};
+static const char* g_imagesDir = g_defaultImagesDir;
 
 
 #ifdef _WIN32
@@ -87,6 +88,9 @@ static PerfInfo g_perfInfo[IMPL_COUNT][8] = {};
 extern "C" int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
+    if (argc > 1)
+        g_imagesDir = argv[1];
+
     const int result = RUN_ALL_TESTS();
 
     printf("\n"
