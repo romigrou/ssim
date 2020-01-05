@@ -39,51 +39,84 @@ namespace rmgr { namespace ssim { namespace neon
 #include <cassert>
 #include <cstring>
 
+#define EXPAND(x)  x
 
 #if RMGR_SSIM_USE_DOUBLE
-    typedef float64x2_t         Vector;
-    typedef float32x2_t         LaneVector;
-    #define VEC_SIZE            2
-    #define VLD1(addr)          vld1q_f64(addr)
-    #define VST1(addr, val)     vst1q_f64((addr), (val))
-    #define VADD(a,b)           vaddq_f64((a), (b))
-    #define VSUB(a,b)           vsubq_f64((a), (b))
-    #define VMUL(a,b)           vmulq_f64((a), (b))
-    #define VMUL_LANE(a,b,n)    vmulq_laneq_f64((a), (b), (n))
-    #define VMLA(a,b)           vfmaq_f64((a), (b), (c))
-    #define VMLA_LANE(a,b,c,n)  vmlaq_lane_f64((a), (b), (c), (n))
-    #define VDIV(a,b)           vdivq_f64((a), (b))
-    #define VDUP(val)           vdupq_n_f64(val)
+    typedef float64x2_t             Vector;
+    #define VEC_SIZE                2
+    #define VLD1(addr)              vld1q_f64(addr)
+    #define VST1(addr, val)         vst1q_f64((addr), (val))
+    #define VADD(a,b)               vaddq_f64((a), (b))
+    #define VSUB(a,b)               vsubq_f64((a), (b))
+    #define VMUL(a,b)               vmulq_f64((a), (b))
+    #define VDIV(a,b)               vdivq_f64((a), (b))
+    #define VDUP(val)               vdupq_n_f64(val)
+    typedef float64x2_t             KVector;
+    #define KVEC_SIZE               2
+    #define KVLD1(addr)             vld1q_f64(addr)
+    #define VMLA(acc,a,b)           acc = vfmaq_f64(acc, a, b)
+    #define VMUL_LANE(res,...)      res = EXPAND(vmulq_laneq_f64(__VA_ARGS__))
+    #define VMLA_LANE(acc,...)      acc = EXPAND(vmlaq_laneq_f64(acc, __VA_ARGS__))
+
 #else
-    typedef float32x4_t         Vector;
-    #define VEC_SIZE            4
-    #define VLD1(addr)          vld1q_f32(addr)
-    #define VST1(addr, val)     vst1q_f32((addr), (val))
-    #define VADD(a,b)           vaddq_f32((a), (b))
-    #define VSUB(a,b)           vsubq_f32((a), (b))
-    #define VMUL(a,b)           vmulq_f32((a), (b))
+
+    typedef float32x4_t             Vector;
+    #define VEC_SIZE                4
+    #define VLD1(addr)              vld1q_f32(addr)
+    #define VST1(addr, val)         vst1q_f32((addr), (val))
+    #define VADD(a,b)               vaddq_f32((a), (b))
+    #define VSUB(a,b)               vsubq_f32((a), (b))
+    #define VMUL(a,b)               vmulq_f32((a), (b))
+    #define VDIV(a,b)               vdivq_f32((a), (b))
+    #define VDUP(val)               vdupq_n_f32(val)
 #if RMGR_ARCH_IS_ARM_64
-    typedef float32x4_t         LaneVector;
-    #define LANE_COUNT          4
-    #define VLD1_LV(addr)       vld1q_f32(addr)
-    #define VMLA(a,b,c)         vfmaq_f32((a), (b), (c))
-    #define VMUL_LANE(a,b,n)    vmulq_laneq_f32((a), (b), (n))
-    #define VMLA_LANE(a,b,c,n)  vfmaq_laneq_f32((a), (b), (c), (n))
+    typedef float32x4_t             KVector;
+    #define KVEC_SIZE               4
+    #define KVLD1(addr)             vld1q_f32(addr)
+    #define VMLA(acc,a,b)           acc = vfmaq_f32(acc, a, b)
+    #define VMUL_LANE(res,...)      res = EXPAND(vmulq_laneq_f32(__VA_ARGS__))
+    #define VMLA_LANE(acc,...)      acc = EXPAND(vmlaq_laneq_f32(acc, __VA_ARGS__))
 #else
-    typedef float32x2_t         LaneVector;
-    #define LANE_COUNT          2
-    #define VLD1_LV(addr)       vld1_f32(addr)
-    #define VMLA(a,b,c)         vmlaq_f32((a), (b), (c))
-    #define VMUL_LANE(a,b,n)    vmulq_lane_f32((a), (b), (n))
-    #define VMLA_LANE(a,b,c,n)  vmlaq_lane_f32((a), (b), (c), (n))
+    typedef float32x2_t             KVector;
+    #define KVEC_SIZE               2
+    #define KVLD1(addr)             vld1_f32(addr)
+    #define VMLA(acc,a,b)           acc = vmlaq_f32(acc, a, b)
+    #define VMUL_LANE(res,...)      res = EXPAND(vmulq_lane_f32(__VA_ARGS__))
+    #define VMLA_LANE(acc,...)      acc = EXPAND(vmlaq_lane_f32(acc, __VA_ARGS__))
 #endif
-    #define VDIV(a,b)           vdivq_f32((a), (b))
-    #define VDUP(val)           vdupq_n_f32(val)
 #endif
 
 
 namespace rmgr { namespace ssim { namespace neon
 {
+
+
+// Clang doesn't seem to be willing to issue the multiply vector by scalar instructions,
+// even though we specify the corresponding intrinsics. Let's force it to do so.
+// Note: haven't tried with GCC...
+#if RMGR_COMPILER_IS_CLANG
+ #if RMGR_ARCH_IS_ARM_64 // Somehow, using the intrinsic for vmul yields better code in 32-bit mode
+    #undef VMUL_LANE
+    #define VMUL_LANE(res,...)  VMUL_LANE_ASM(res, __VA_ARGS__)
+#endif
+    #undef VMLA_LANE
+    #define VMLA_LANE(acc,...)  VMLA_LANE_ASM(acc, __VA_ARGS__)
+    #if RMGR_ARCH_IS_ARM_32
+        #define REGISTER(r32, r64, type, name)  register type name __asm__(#r32)
+        #define VMUL_LANE_ASM(res,v1,v2,n)  __asm__("vmul.f32 %0, %1, %2[" #n "]": "+w"(res): "w"(v1), "w"(v2))
+        #define VMLA_LANE_ASM(acc,v1,v2,n)  __asm__("vmla.f32 %0, %1, %2[" #n "]": "+w"(acc): "w"(v1), "w"(v2))
+    #elif RMGR_ARCH_IS_ARM_64 && !RMGR_SSIM_USE_DOUBLE
+        #define REGISTER(r32, r64, type, name)  register type name __asm__(#r64)
+        #define VMUL_LANE_ASM(res,v1,v2,n)  __asm__("fmul %0.4s, %1.4s, %2.s[" #n "]": "+w"(res): "w"(v1), "w"(v2))
+        #define VMLA_LANE_ASM(acc,v1,v2,n)  __asm__("fmla %0.4s, %1.4s, %2.s[" #n "]": "+w"(acc): "w"(v1), "w"(v2))
+    #else
+        #define REGISTER(r32, r64, type, name)  register type name __asm__(#r64)
+        #define VMUL_LANE_ASM(res,v1,v2,n)  __asm__("fmul %0.2d, %1.2d, %2.d[" #n "]": "+w"(res): "w"(v1), "w"(v2))
+        #define VMLA_LANE_ASM(acc,v1,v2,n)  __asm__("fmla %0.2d, %1.2d, %2.d[" #n "]": "+w"(acc): "w"(v1), "w"(v2))
+    #endif
+#else
+    #define REGISTER(r32, r64, type, name)  type name
+#endif
 
 
 //=================================================================================================
@@ -183,14 +216,14 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
                     Vector s6 = VLD1(s + VEC_SIZE*6);
                     Vector d7 = VLD1(d + VEC_SIZE*7);
                     Vector s7 = VLD1(s + VEC_SIZE*7);
-                    d0 = VMLA(d0, s0, k);
-                    d1 = VMLA(d1, s1, k);
-                    d2 = VMLA(d2, s2, k);
-                    d3 = VMLA(d3, s3, k);
-                    d4 = VMLA(d4, s4, k);
-                    d5 = VMLA(d5, s5, k);
-                    d6 = VMLA(d6, s6, k);
-                    d7 = VMLA(d7, s7, k);
+                    VMLA(d0, s0, k);
+                    VMLA(d1, s1, k);
+                    VMLA(d2, s2, k);
+                    VMLA(d3, s3, k);
+                    VMLA(d4, s4, k);
+                    VMLA(d5, s5, k);
+                    VMLA(d6, s6, k);
+                    VMLA(d7, s7, k);
                     VST1(d + VEC_SIZE*0, d0);
                     VST1(d + VEC_SIZE*1, d1);
                     VST1(d + VEC_SIZE*2, d2);
@@ -218,7 +251,7 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
     (void)kernel;
 
     // The precomputed 21 unique values of the Gaussian kernel
-    const unsigned kCount = (21 + VEC_SIZE + 1) & ~(VEC_SIZE-  1);
+    const unsigned kCount = (21 + KVEC_SIZE + 1) & ~(KVEC_SIZE-  1);
     static RMGR_ALIGNED_VAR(64, const Float, k21[kCount]) =
     {
         Float(0.07076223776394697),
@@ -230,14 +263,67 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
     };
 
     // Preload coeffs in registers
-    const unsigned lvCount = kCount / LANE_COUNT;
-    LaneVector lv[lvCount];
-    for (unsigned i=0; i<lvCount; ++i)
-        lv[i] = VLD1_LV(k21 + i*LANE_COUNT);
+    REGISTER(d0, v0, const KVector, k0)  = KVLD1(k21);
+    REGISTER(d1, v1, const KVector, k1)  = KVLD1(k21 + KVEC_SIZE);
+    REGISTER(d2, v2, const KVector, k2)  = KVLD1(k21 + KVEC_SIZE*2);
+    REGISTER(d3, v3, const KVector, k3)  = KVLD1(k21 + KVEC_SIZE*3);
+    REGISTER(d4, v4, const KVector, k4)  = KVLD1(k21 + KVEC_SIZE*4);
+    REGISTER(d5, v5, const KVector, k5)  = KVLD1(k21 + KVEC_SIZE*5);
+#if KVEC_SIZE == 2
+    REGISTER(d6, v6, const KVector, k6)  = KVLD1(k21 + KVEC_SIZE*6);
+    REGISTER(d7, v7, const KVector, k7)  = KVLD1(k21 + KVEC_SIZE*7);
+    REGISTER(d8, v8, const KVector, k8)  = KVLD1(k21 + KVEC_SIZE*8);
+    REGISTER(d9, v9, const KVector, k9)  = KVLD1(k21 + KVEC_SIZE*9);
+    REGISTER(d10,v10,const KVector, k10) = KVLD1(k21 + KVEC_SIZE*10);
+#endif
 
-    #define ki(x,y)               (y * (y+1)/2 + x)
-    #define VMUL_K(a, kx, ky)     VMUL_LANE((a), lv[ki(kx,ky) / LANE_COUNT], ki(kx,ky) % LANE_COUNT)
-    #define VMLA_K(a, b, kx, ky)  VMLA_LANE((a), (b), lv[ki(kx,ky) / LANE_COUNT], ki(kx,ky) % LANE_COUNT)
+    // Pre-loaded registers and indexes for each of the kernel coefficients
+    #define K00   k0,0
+    #define K01   k0,1
+#if KVEC_SIZE == 2
+    #define K02   k1,1
+    #define K03   k3,0
+    #define K04   k5,0
+    #define K05   k7,1
+    #define K11   k1,0
+    #define K12   k2,0
+    #define K13   k3,1
+    #define K14   k5,1
+    #define K15   k8,0
+    #define K22   k2,1
+    #define K23   k4,0
+    #define K24   k6,0
+    #define K25   k8,1
+    #define K33   k4,1
+    #define K34   k6,1
+    #define K35   k9,0
+    #define K44   k7,0
+    #define K45   k9,1
+    #define K55   k10,0
+#else
+    #define K02   k0,3
+    #define K03   k1,2
+    #define K04   k2,2
+    #define K05   k3,3
+    #define K11   k0,2
+    #define K12   k1,0
+    #define K13   k1,3
+    #define K14   k2,3
+    #define K15   k4,0
+    #define K22   k1,1
+    #define K23   k2,0
+    #define K24   k3,0
+    #define K25   k4,1
+    #define K33   k2,1
+    #define K34   k3,1
+    #define K35   k4,2
+    #define K44   k3,2
+    #define K45   k4,3
+    #define K55   k5,0
+#endif
+
+    #define VMUL_K(res, v, k)  EXPAND_AND_CALL(VMUL_LANE, res, v, k)
+    #define VMLA_K(res, v, k)  EXPAND_AND_CALL(VMLA_LANE, res, v, k)
 
     const Float* s = srce -  5*srceStride;
     Float*       d = dest - 10*destStride;
@@ -249,6 +335,14 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
     {
         memset(d+10*destStride, 0, rowSize);
         int32_t xd = width;
+        const ptrdiff_t vdStride = destStride / VEC_SIZE;
+        Vector* vd_5 = reinterpret_cast<Vector*>(d);
+        Vector* vd_3 = vd_5 + 2*vdStride;
+        Vector* vd_1 = vd_3 + 2*vdStride;
+        Vector* vd1  = vd_1 + 2*vdStride;
+        Vector* vd3  = vd1  + 2*vdStride;
+        Vector* vd5  = vd3  + 2*vdStride;
+
         do
         {
             // Unrolled code that exploits all the symmetries in the kernel.
@@ -256,76 +350,116 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
             // The diagonal symmetries say that k(x,y) == k(y,x), we cannot exploit that for factorizing,
             // but we can load fewer coefficients by keeping x <= y (21 coefficients instead of 36).
 
-            const Vector s0 = VLD1(s);
-            const Vector s1 = VADD(VLD1(s+1), VLD1(s-1)); // Add prior to multiplying due to the vertical line of symmetry
-            const Vector s2 = VADD(VLD1(s+2), VLD1(s-2)); // Add prior to multiplying due to the vertical line of symmetry
-            const Vector s3 = VADD(VLD1(s+3), VLD1(s-3)); // Add prior to multiplying due to the vertical line of symmetry
-            const Vector s4 = VADD(VLD1(s+4), VLD1(s-4)); // Add prior to multiplying due to the vertical line of symmetry
-            const Vector s5 = VADD(VLD1(s+5), VLD1(s-5)); // Add prior to multiplying due to the vertical line of symmetry
+            Vector sum0, sum1, sum2, sum3, sum4, sum5;
 
-            Vector sum0 = VMUL_K(s0, 0,0);
-            Vector sum1 = VMUL_K(s0, 0,1);
-            Vector sum2 = VMUL_K(s0, 0,2);
-            Vector sum3 = VMUL_K(s0, 0,3);
-            Vector sum4 = VMUL_K(s0, 0,4);
-            Vector sum5 = VMUL_K(s0, 0,5);
+            const Vector s1  = VLD1(s+1);
+            const Vector s_1 = VLD1(s-1);
+            const Vector s0  = VLD1(s);
 
-            sum0 = VMLA_K(sum0, s1, 0,1);
-            sum1 = VMLA_K(sum1, s1, 1,1);
-            sum2 = VMLA_K(sum2, s1, 1,2);
-            sum3 = VMLA_K(sum3, s1, 1,3);
-            sum4 = VMLA_K(sum4, s1, 1,4);
-            sum5 = VMLA_K(sum5, s1, 1,5);
+            const Vector s11 = VADD(s1, s_1); // Add prior to multiplying due to the vertical line of symmetry
+            const Vector s2  = VLD1(s+2);
+            const Vector s_2 = VLD1(s-2);
+            VMUL_LANE(sum0, s0, K00);
+            VMUL_LANE(sum0, s0, K00);
+            VMUL_LANE(sum1, s0, K01);
+            VMUL_LANE(sum2, s0, K02);
+            VMUL_LANE(sum3, s0, K03);
+            VMUL_LANE(sum4, s0, K04);
+            VMUL_LANE(sum5, s0, K05);
 
-            sum0 = VMLA_K(sum0, s2, 0,2);
-            sum1 = VMLA_K(sum1, s2, 1,2);
-            sum2 = VMLA_K(sum2, s2, 2,2);
-            sum3 = VMLA_K(sum3, s2, 2,3);
-            sum4 = VMLA_K(sum4, s2, 2,4);
-            sum5 = VMLA_K(sum5, s2, 2,5);
+            const Vector s22 = VADD(s2, s_2); // Add prior to multiplying due to the vertical line of symmetry
+            const Vector s3  = VLD1(s+3);
+            const Vector s_3 = VLD1(s-3);
+            VMLA_LANE(sum0, s11, K01);
+            VMLA_LANE(sum1, s11, K11);
+            VMLA_LANE(sum2, s11, K12);
+            VMLA_LANE(sum3, s11, K13);
+            VMLA_LANE(sum4, s11, K14);
+            VMLA_LANE(sum5, s11, K15);
 
-            sum0 = VMLA_K(sum0, s3, 0,3);
-            sum1 = VMLA_K(sum1, s3, 1,3);
-            sum2 = VMLA_K(sum2, s3, 2,3);
-            sum3 = VMLA_K(sum3, s3, 3,3);
-            sum4 = VMLA_K(sum4, s3, 3,4);
-            sum5 = VMLA_K(sum5, s3, 3,5);
+            const Vector s33 = VADD(s3, s_3); // Add prior to multiplying due to the vertical line of symmetry
+            const Vector s4  = VLD1(s+4);
+            const Vector s_4 = VLD1(s-4);
+            VMLA_LANE(sum0, s22, K02);
+            VMLA_LANE(sum1, s22, K12);
+            VMLA_LANE(sum2, s22, K22);
+            VMLA_LANE(sum3, s22, K23);
+            VMLA_LANE(sum4, s22, K24);
+            VMLA_LANE(sum5, s22, K25);
 
-            sum0 = VMLA_K(sum0, s4, 0,4);
-            sum1 = VMLA_K(sum1, s4, 1,4);
-            sum2 = VMLA_K(sum2, s4, 2,4);
-            sum3 = VMLA_K(sum3, s4, 3,4);
-            sum4 = VMLA_K(sum4, s4, 4,4);
-            sum5 = VMLA_K(sum5, s4, 4,5);
+            const Vector s44 = VADD(s4, s_4); // Add prior to multiplying due to the vertical line of symmetry
+            const Vector s5  = VLD1(s+5);
+            const Vector s_5 = VLD1(s-5);
+            VMLA_LANE(sum0, s33, K03);
+            VMLA_LANE(sum1, s33, K13);
+            VMLA_LANE(sum2, s33, K23);
+            VMLA_LANE(sum3, s33, K33);
+            VMLA_LANE(sum4, s33, K34);
+            VMLA_LANE(sum5, s33, K35);
 
-            sum0 = VMLA_K(sum0, s5, 0,5);
-            sum1 = VMLA_K(sum1, s5, 1,5);
-            sum2 = VMLA_K(sum2, s5, 2,5);
-            sum3 = VMLA_K(sum3, s5, 3,5);
-            sum4 = VMLA_K(sum4, s5, 4,5);
-            sum5 = VMLA_K(sum5, s5, 5,5);
+            const Vector s55 = VADD(s5, s_5); // Add prior to multiplying due to the vertical line of symmetry
+            VMLA_LANE(sum0, s44, K04);
+            VMLA_LANE(sum1, s44, K14);
+            VMLA_LANE(sum2, s44, K24);
+            VMLA_LANE(sum3, s44, K34);
+            VMLA_LANE(sum4, s44, K44);
+            VMLA_LANE(sum5, s44, K45);
+
+            VMLA_LANE(sum0, s55, K05);
+            VMLA_LANE(sum1, s55, K15);
+            VMLA_LANE(sum2, s55, K25);
+            VMLA_LANE(sum3, s55, K35);
+            VMLA_LANE(sum4, s55, K45);
+            VMLA_LANE(sum5, s55, K55);
 
             // Reuse sums thanks to horizontal line of symmetry
-            Vector* vd = reinterpret_cast<Vector*>(d);
-            *vd = VADD(sum5, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum4, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum3, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum2, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum1, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum0, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum1, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum2, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum3, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum4, *vd);  vd+=destStride/VEC_SIZE;
-            *vd = VADD(sum5, *vd);
+            Vector d0  = vd_1[vdStride];
+            Vector d_1 = vd_1[0];
+            Vector d1  = vd1[0];
+            Vector d_2 = vd_3[vdStride];
+            Vector d2  = vd1[vdStride];
+            Vector d_3 = vd_3[0];
+            Vector d3  = vd3[0];
+            Vector d_4 = vd_5[vdStride];
+            Vector d4  = vd3[vdStride];
+            Vector d_5 = vd_5[0];
+            Vector d5  = vd5[0];
+            d0  = VADD(d0,  sum0);
+            d_1 = VADD(d_1, sum1);
+            d1  = VADD(d1,  sum1);
+            d_2 = VADD(d_2, sum2);
+            d2  = VADD(d2,  sum2);
+            d_3 = VADD(d_3, sum3);
+            d3  = VADD(d3,  sum3);
+            d_4 = VADD(d_4, sum4);
+            d4  = VADD(d4,  sum4);
+            d_5 = VADD(d_5, sum5);
+            d5  = VADD(d5,  sum5);
+            vd_1[vdStride] = d0;
+            vd_1[0]        = d_1;
+            vd1[0]         = d1;
+            vd_3[vdStride] = d_2;
+            vd1[vdStride]  = d2;
+            vd_3[0]        = d_3;
+            vd3[0]         = d3;
+            vd_5[vdStride] = d_4;
+            vd3[vdStride]  = d4;
+            vd_5[0]        = d_5;
+            vd5[0]         = d5;
+
+            ++vd_5;
+            ++vd_3;
+            ++vd_1;
+            ++vd1;
+            ++vd3;
+            ++vd5;
 
             s += VEC_SIZE;
-            d += VEC_SIZE;
         }
         while ((xd -= VEC_SIZE) != 0);
 
         s += srceStride - width;
-        d += destStride - width;
+        d += destStride;
     }
     while (--yd);
 
