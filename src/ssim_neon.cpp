@@ -20,7 +20,7 @@
 
 #include "ssim_internal.h"
 
-#if !defined(__ARM_NEON) && RMGR_COMPILER_IS_MSVC_AT_LEAST(17,0,0) && RMGR_ARCH_IS_ARM_32
+#if !defined(__ARM_NEON) && ((RMGR_COMPILER_IS_MSVC_AT_LEAST(17,0,0) && RMGR_ARCH_IS_ARM_32) || (RMGR_COMPILER_IS_MSVC_AT_LEAST(19,20,0) && RMGR_ARCH_IS_ARM_64))
     #define __ARM_NEON  1
 #endif
 
@@ -69,7 +69,7 @@ namespace rmgr { namespace ssim { namespace neon
     #define VMUL(a,b)               vmulq_f32((a), (b))
     #define VDIV(a,b)               vdivq_f32((a), (b))
     #define VDUP(val)               vdupq_n_f32(val)
-#if RMGR_ARCH_IS_ARM_64
+#if RMGR_ARCH_IS_ARM_64 && !RMGR_COMPILER_IS_MSVC
     typedef float32x4_t             KVector;
     #define KVEC_SIZE               4
     #define KVLD1(addr)             vld1q_f32(addr)
