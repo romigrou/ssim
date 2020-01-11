@@ -240,7 +240,7 @@ static void precompute_gaussian_kernel(Float kernel[], int radius, Float sigma) 
     {
         printf("  ");
         for (int x = 0; x < size; x++)
-            printf("%19.17f, ", kernel[x + y * size]);
+            printf("%19.17e, ", kernel[x + y * size]);
         printf("\n");
     }
     printf("}\n\n");

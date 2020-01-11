@@ -186,7 +186,7 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
         dest += destStride;
     }
 
-#else
+#elif 1
 
     // Faster version, but tailored for the radius==5 case
     // Here too we don't care about buffer overrun as we know the buffer was allocated accordingly.
@@ -197,12 +197,12 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
     // The precomputed 21 unique values of the Gaussian kernel
     static RMGR_ALIGNED_VAR(64, const Float, k21[21 * VEC_SIZE]) =
     {
-        VCOEFF(0.07076223776394697),
-        VCOEFF(0.05666197049168457), VCOEFF(0.04537135909566032),
-        VCOEFF(0.02909122564855043), VCOEFF(0.02329443247348710), VCOEFF(0.01195976041003701),
-        VCOEFF(0.00957662749024029), VCOEFF(0.00766836382523672), VCOEFF(0.00393706926284678), VCOEFF(0.00129605559384320),
-        VCOEFF(0.00202135875836257), VCOEFF(0.00161857756253439), VCOEFF(0.00083100542908720), VCOEFF(0.00027356116008581), VCOEFF(0.00005774112519786),
-        VCOEFF(0.00027356116008581), VCOEFF(0.00021905065286602), VCOEFF(0.00011246435511668), VCOEFF(0.00003702247708275), VCOEFF(0.00000781441153305), VCOEFF(0.00000105756559815)
+        VCOEFF(7.07622393965721130e-02),
+        VCOEFF(5.66619709134101868e-02), VCOEFF(4.53713610768318176e-02),
+        VCOEFF(2.90912277996540070e-02), VCOEFF(2.32944320887327194e-02), VCOEFF(1.19597595185041428e-02),
+        VCOEFF(9.57662798464298248e-03), VCOEFF(7.66836293041706085e-03), VCOEFF(3.93706932663917542e-03), VCOEFF(1.29605561960488558e-03),
+        VCOEFF(2.02135881409049034e-03), VCOEFF(1.61857774946838617e-03), VCOEFF(8.31005279906094074e-04), VCOEFF(2.73561221547424793e-04), VCOEFF(5.77411265112459660e-05),
+        VCOEFF(2.73561221547424793e-04), VCOEFF(2.19050692976452410e-04), VCOEFF(1.12464345875196159e-04), VCOEFF(3.70224843209143728e-05), VCOEFF(7.81441485742107034e-06), VCOEFF(1.05756600987660931e-06)
     };
 
     const Float* s = srce -  5*srceStride;
@@ -298,6 +298,217 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
     while (--yd);
 
     #undef k
+
+#elif 1
+
+    const int32_t kernelStride = 2*radius + 1;
+
+    for (int32_t yd=0; yd<height; yd+=4)
+    {
+        memset(dest,              0, rowSize);
+        memset(dest+destStride,   0, rowSize);
+        memset(dest+destStride*2, 0, rowSize);
+        memset(dest+destStride*3, 0, rowSize);
+
+        for (int32_t xk=-radius; xk<=radius; ++xk)
+        {
+            int32_t yk = -radius;
+
+            // Process 4 filter coefficients at a time
+            for (; yk+3<=radius; yk+=4)
+            {
+                const float* k  = kernel + yk*kernelStride + xk;
+                const float  kA = *k;  k+=kernelStride;
+                const float  kB = *k;  k+=kernelStride;
+                const float  kC = *k;  k+=kernelStride;
+                const float  kD = *k;
+
+                float* dA = dest;
+                float* dB = dA + destStride;
+                float* dC = dB + destStride;
+                float* dD = dC + destStride;
+
+                const float* sARow = srce + (yd+yk) * srceStride + xk;
+                const float* sBRow = sARow + srceStride;
+                const float* sCRow = sBRow + srceStride;
+                const float* sDRow = sCRow + srceStride;
+                const float* sERow = sDRow + srceStride;
+                const float* sFRow = sERow + srceStride;
+                const float* sGRow = sFRow + srceStride;
+
+                int32_t xd = width;
+
+                // SIMD loop
+                if ((xd -= 4) >= 0)
+                {
+                    const __m128 kA128 = _mm_set1_ps(kA);
+                    const __m128 kB128 = _mm_set1_ps(kB);
+                    const __m128 kC128 = _mm_set1_ps(kC);
+                    const __m128 kD128 = _mm_set1_ps(kD);
+                    do
+                    {
+                        const __m128 sA = _mm_loadu_ps(sARow);  sARow+=4;
+                        const __m128 sB = _mm_loadu_ps(sBRow);  sBRow+=4;
+                        const __m128 sC = _mm_loadu_ps(sCRow);  sCRow+=4;
+                        const __m128 sD = _mm_loadu_ps(sDRow);  sDRow+=4;
+                        const __m128 sE = _mm_loadu_ps(sERow);  sERow+=4;
+                        const __m128 sF = _mm_loadu_ps(sFRow);  sFRow+=4;
+                        const __m128 sG = _mm_loadu_ps(sGRow);  sGRow+=4;
+                        __m128* dA128 = reinterpret_cast<__m128*>(dA);
+                        __m128* dB128 = reinterpret_cast<__m128*>(dB);
+                        __m128* dC128 = reinterpret_cast<__m128*>(dC);
+                        __m128* dD128 = reinterpret_cast<__m128*>(dD);
+                        *dA128 = _mm_add_ps(_mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sA), _mm_mul_ps(kB128,sB)), _mm_add_ps(_mm_mul_ps(kC128,sC), _mm_mul_ps(kD128,sD))), *dA128);
+                        *dB128 = _mm_add_ps(_mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sB), _mm_mul_ps(kB128,sC)), _mm_add_ps(_mm_mul_ps(kC128,sD), _mm_mul_ps(kD128,sE))), *dB128);
+                        *dC128 = _mm_add_ps(_mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sC), _mm_mul_ps(kB128,sD)), _mm_add_ps(_mm_mul_ps(kC128,sE), _mm_mul_ps(kD128,sF))), *dC128);
+                        *dD128 = _mm_add_ps(_mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sD), _mm_mul_ps(kB128,sE)), _mm_add_ps(_mm_mul_ps(kC128,sF), _mm_mul_ps(kD128,sG))), *dD128);
+                        dA += 4;
+                        dB += 4;
+                        dC += 4;
+                        dD += 4;
+                    }
+                    while ((xd -= 4) >= 0);
+                }
+                xd += 4;
+
+                // Scalar epilogue
+                while (--xd >= 0)
+                {
+                    const float sA = *sARow++;
+                    const float sB = *sBRow++;
+                    const float sC = *sCRow++;
+                    const float sD = *sDRow++;
+                    const float sE = *sERow++;
+                    const float sF = *sFRow++;
+                    const float sG = *sGRow++;
+                    *dA++ += (kA*sA + kB*sB) + (kC*sC + kD*sD);
+                    *dB++ += (kA*sB + kB*sC) + (kC*sD + kD*sE);
+                    *dC++ += (kA*sC + kB*sD) + (kC*sE + kD*sF);
+                    *dD++ += (kA*sD + kB*sE) + (kC*sF + kD*sG);
+                }
+            }
+
+            // Process 3 filter coefficients at a time
+//            for (; yk+2<=radius; yk+=3)
+            {
+                const float* k  = kernel + yk*kernelStride + xk;
+                const float  kA = *k;  k+=kernelStride;
+                const float  kB = *k;  k+=kernelStride;
+                const float  kC = *k;
+
+                float* dA = dest;
+                float* dB = dA + destStride;
+                float* dC = dB + destStride;
+                float* dD = dC + destStride;
+
+                const float* sARow = srce + (yd+yk) * srceStride + xk;
+                const float* sBRow = sARow + srceStride;
+                const float* sCRow = sBRow + srceStride;
+                const float* sDRow = sCRow + srceStride;
+                const float* sERow = sDRow + srceStride;
+                const float* sFRow = sERow + srceStride;
+
+                int32_t xd = width;
+
+                // SIMD loop
+                if ((xd -= 4) >= 0)
+                {
+                    const __m128 kA128 = _mm_set1_ps(kA);
+                    const __m128 kB128 = _mm_set1_ps(kB);
+                    const __m128 kC128 = _mm_set1_ps(kC);
+                    do
+                    {
+                        const __m128 sA = _mm_loadu_ps(sARow);  sARow+=4;
+                        const __m128 sB = _mm_loadu_ps(sBRow);  sBRow+=4;
+                        const __m128 sC = _mm_loadu_ps(sCRow);  sCRow+=4;
+                        const __m128 sD = _mm_loadu_ps(sDRow);  sDRow+=4;
+                        const __m128 sE = _mm_loadu_ps(sERow);  sERow+=4;
+                        const __m128 sF = _mm_loadu_ps(sFRow);  sFRow+=4;
+                        __m128* dA128 = reinterpret_cast<__m128*>(dA);
+                        __m128* dB128 = reinterpret_cast<__m128*>(dB);
+                        __m128* dC128 = reinterpret_cast<__m128*>(dC);
+                        __m128* dD128 = reinterpret_cast<__m128*>(dD);
+                        *dA128 = _mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sA), _mm_mul_ps(kB128,sB)), _mm_add_ps(_mm_mul_ps(kC128,sC), *dA128));
+                        *dB128 = _mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sB), _mm_mul_ps(kB128,sC)), _mm_add_ps(_mm_mul_ps(kC128,sD), *dB128));
+                        *dC128 = _mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sC), _mm_mul_ps(kB128,sD)), _mm_add_ps(_mm_mul_ps(kC128,sE), *dC128));
+                        *dD128 = _mm_add_ps(_mm_add_ps(_mm_mul_ps(kA128,sD), _mm_mul_ps(kB128,sE)), _mm_add_ps(_mm_mul_ps(kC128,sF), *dD128));
+                        dA += 4;
+                        dB += 4;
+                        dC += 4;
+                        dD += 4;
+                    }
+                    while ((xd -= 4) >= 0);
+                }
+                xd += 4;
+
+                // Scalar epilogue
+                while (--xd >= 0)
+                {
+                    const float sA = *sARow++;
+                    const float sB = *sBRow++;
+                    const float sC = *sCRow++;
+                    const float sD = *sDRow++;
+                    const float sE = *sERow++;
+                    const float sF = *sFRow++;
+                    *dA++ += (kA*sA + kB*sB) + kC*sC;
+                    *dB++ += (kA*sB + kB*sC) + kC*sD;
+                    *dC++ += (kA*sC + kB*sD) + kC*sE;
+                    *dD++ += (kA*sD + kB*sE) + kC*sF;
+                }
+            }
+
+            // Filter coefficient epilogue
+#if 0
+            for (; yk<=radius; ++yk)
+            {
+                const float  k    = kernel[yk*kernelStride + xk];
+                const __m128 k128 = _mm_set1_ps(k);
+                const float* sA   = srce + (yd+yk) * srceStride + xk;
+                const float* sB   = sA + srceStride;
+                const float* sC   = sB + srceStride;
+                const float* sD   = sC + srceStride;
+                float*       dA   = dest;
+                float*       dB   = dA + destStride;
+                float*       dC   = dB + destStride;
+                float*       dD   = dC + destStride;
+
+                int32_t xd = width;
+
+                while ((xd -= 4) >= 0)
+                {
+                    __m128* dA128 = reinterpret_cast<__m128*>(dA);
+                    __m128* dB128 = reinterpret_cast<__m128*>(dB);
+                    __m128* dC128 = reinterpret_cast<__m128*>(dC);
+                    __m128* dD128 = reinterpret_cast<__m128*>(dD);
+                    *dA128 = _mm_add_ps(_mm_mul_ps(_mm_loadu_ps(sA), k128), *dA128);
+                    *dB128 = _mm_add_ps(_mm_mul_ps(_mm_loadu_ps(sB), k128), *dB128);
+                    *dC128 = _mm_add_ps(_mm_mul_ps(_mm_loadu_ps(sC), k128), *dC128);
+                    *dD128 = _mm_add_ps(_mm_mul_ps(_mm_loadu_ps(sD), k128), *dD128);
+                    sA += 4;
+                    sB += 4;
+                    sC += 4;
+                    sD += 4;
+                    dA += 4;
+                    dB += 4;
+                    dC += 4;
+                    dD += 4;
+                }
+                xd += 4;
+
+                while (--xd >= 0)
+                {
+                    *dA++ += k * *sA++;
+                    *dB++ += k * *sB++;
+                    *dC++ += k * *sC++;
+                    *dD++ += k * *sD++;
+                }
+            }
+#endif
+        }
+
+        dest += 4 * destStride;
+    }
+
 #endif
 }
 
