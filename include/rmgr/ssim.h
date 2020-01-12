@@ -134,7 +134,7 @@
     #define RMGR_COMPILER_IS_GCC_OR_CLANG  (RMGR_COMPILER_IS_GCC || RMGR_COMPILER_IS_CLANG)
 #endif
 #ifndef RMGR_COMPILER_VERSION_IS_AT_LEAST
-    /// Returns non-zero if the compiler version is equal or above the specified one
+    /// Returns non-zero if the compiler version is >= the specified one
     #define RMGR_COMPILER_VERSION_IS_AT_LEAST(major,minor,patch)                                   \
         (    (major) <  RMGR_COMPILER_VERSION_MAJOR                                                \
          || ((major) == RMGR_COMPILER_VERSION_MAJOR && (    (minor) <  RMGR_COMPILER_VERSION_MINOR \
@@ -339,6 +339,7 @@
 
 
 // Workaround for MSVC prior to 2010 lacking stdint.h
+#if !RMGR_COMPILER_IS_DOXYGEN
 #if RMGR_COMPILER_IS_MSVC_LESS_THAN(16,0,0)
 namespace rmgr { namespace ssim
 {
@@ -357,6 +358,7 @@ namespace rmgr { namespace ssim
     typedef ::uint32_t uint32_t;
     typedef ::uint64_t uint64_t;
 }}
+#endif
 #endif
 
 
