@@ -24,6 +24,9 @@
 #include <cerrno>
 #include <cmath>
 #include <cstring>
+#ifdef __SIZEOF_FLOAT128__
+    #include <quadmath.h>
+#endif
 
 
 namespace rmgr { namespace ssim { namespace naive
@@ -47,6 +50,20 @@ void multiply(F* product, const F* a, const F* b, uint32_t width, uint32_t heigh
 }
 
 
+template<typename T>
+inline T exp(T x) RMGR_NOEXCEPT
+{
+    return std::exp(x);
+}
+
+#ifdef __SIZEOF_FLOAT128__
+inline __float128 exp(__float128 x)
+{
+    return ::expq(x);
+}
+#endif
+
+
 template<typename F>
 inline F gaussian_kernel(int x, int y, F sigma) RMGR_NOEXCEPT
 {
@@ -60,7 +77,6 @@ inline F gaussian_kernel(int x, int y, F sigma) RMGR_NOEXCEPT
     const F tau = F(6.283185307179586476925286766559L);
 #endif
 
-    using std::exp;
     F sigma2      = sigma * sigma;
     F numerator   = exp(-F(x*x + y*y) / (2 * sigma2));
     F denominator = tau * sigma2;

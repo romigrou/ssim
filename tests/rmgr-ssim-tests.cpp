@@ -45,8 +45,18 @@ static const char  g_defaultImagesDir[] = {RMGR_SSIM_TESTS_IMAGES_DIR};
 static const char* g_imagesDir = g_defaultImagesDir;
 
 
-/// Floating-point type for computing reference SSIMs. The more precise, the better.
-typedef long double RefFloat;
+// Floating-point type for computing reference SSIMs. The more precise, the better.
+// This being said, 128-bit float is really slooooooooooooow and therefore disabled.
+#if defined(__SIZEOF_FLOAT128__) && 0
+    typedef __float128 RefFloat;
+    #define REF_TOLERANCE  DBL_EPSILON
+#elif DBL_MANT_DIG < LDBL_MANT_DIG && LDBL_MANT_DIG <= 64 // long double OK if no more than 80 bits
+    typedef long double RefFloat;
+    #define REF_TOLERANCE  DBL_EPSILON
+#else
+    typedef double RefFloat;
+    #define REF_TOLERANCE  1e-13
+#endif
 
 
 struct RefSsim
@@ -56,6 +66,10 @@ struct RefSsim
 
     ~RefSsim() {delete[] map;}
 };
+
+
+#define REF_SSIM(val)                {RefFloat(val##L), NULL}
+#define REF_SSIM3(val1, val2, val3)  {REF_SSIM(val1), REF_SSIM(val2), REF_SSIM(val3)}
 
 
 static RefFloat g_largestGlobalError[IMPL_COUNT] = {};
@@ -217,7 +231,13 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
             // Compute reference SSIM using the naive implementation
             expected.map = new RefFloat[imgWidth * imgHeight];
             ASSERT_NE(static_cast<RefFloat*>(NULL), expected.map);
-            expected.ssim = rmgr::ssim::naive::compute_ssim<RefFloat>(refWidth, refHeight, refData+channel, refChannels, refWidth*refChannels, imgData+channel, imgChannels, imgWidth*imgChannels, expected.map, 1, imgWidth);
+            const RefFloat refSsim = rmgr::ssim::naive::compute_ssim<RefFloat>(refWidth, refHeight, refData+channel, refChannels, refWidth*refChannels, imgData+channel, imgChannels, imgWidth*imgChannels, expected.map, 1, imgWidth);
+            if (expected.ssim == 0)
+                expected.ssim = refSsim;
+            else
+            {
+                ASSERT_NEAR(double(expected.ssim), double(refSsim), REF_TOLERANCE);
+            }
         }
 
         Ticks t1 = get_ticks();
@@ -255,7 +275,6 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
 static void test_einstein(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
 {
     // These are the examples from the original SSIM page
-//    static const float ssims[] = {1.0f, 0.988f, 0.913f, 0.840f, 0.694f, 0.662f};
     static char const* const files[] =
     {
         "einstein.png",
@@ -267,7 +286,15 @@ static void test_einstein(rmgr::ssim::Implementation impl, unsigned flags, bool 
     };
 
     const size_t fileCount = sizeof(files) / sizeof(files[0]);
-    static RefSsim ssims[fileCount] = {}; //{1.000000f, 0.987346f, 0.901217f, 0.839534f, 0.702192f, 0.669938f};
+    static RefSsim ssims[fileCount] =
+    {
+        REF_SSIM(1.000000000000000000000000000000000),
+        REF_SSIM(0.987345868581455342542598819456431),
+        REF_SSIM(0.901217091012390185892926336265424),
+        REF_SSIM(0.839533769204009687363862456348761),
+        REF_SSIM(0.702192033056262932311859850040160),
+        REF_SSIM(0.669938383706498006524758818118705)
+    };
 
     char refPath[256];
     snprintf(refPath, sizeof(refPath), "%s/%s", g_imagesDir, files[0]);
@@ -297,14 +324,40 @@ static void test_bbb(const char* stub, rmgr::ssim::Implementation impl, unsigned
 
 static void test_bbb360(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
 {
-    static RefSsim ssims[11][3] = {};
+    static RefSsim ssims[11][3] =
+    {
+        REF_SSIM3(0.536721290892722071348429184055824, 0.557679233053209125289696932926184, 0.526031513635702840587504290945777),
+        REF_SSIM3(0.781960192572926695821628595832862, 0.804149451534862476018243063427270, 0.703025357253354342054715574458660),
+        REF_SSIM3(0.862834074806723617859990108052267, 0.880701746915744172950579035555195, 0.784356475703502210131566701543072),
+        REF_SSIM3(0.898070496358702480378970886438265, 0.912741992286503936498222222880013, 0.822446210626770627074389393816049),
+        REF_SSIM3(0.915514377758508385333412880473089, 0.928698340210038737751945920509119, 0.847240538058324639504848334862311),
+        REF_SSIM3(0.927101962500570103255129350527244, 0.938759964612735267835543684222428, 0.863675298922732847384112195637017),
+        REF_SSIM3(0.936861175428972248097542675595024, 0.947408994087814754831062903822682, 0.877975192980452644830044205293250),
+        REF_SSIM3(0.948039421285792285290951129294839, 0.957243672039308879048653965986035, 0.894392895809706693966294449559374),
+        REF_SSIM3(0.960025033443250417857130228422079, 0.967731421658366681581874713168021, 0.913111040515580765780971175775347),
+        REF_SSIM3(0.975073770491180460911502834692628, 0.981018317368407488675155659617660, 0.941232778962792419573339542702927),
+        REF_SSIM3(0.996208334080668590937537440614104, 0.997984057353425511310232130540623, 0.993268256918489063772002792895026)
+    };
     test_bbb("big_buck_bunny_360_07806", impl, flags, buildSsimMap, ssims);
 }
 
 
 static void test_bbb1080(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
 {
-    static RefSsim ssims[11][3] = {};
+    static RefSsim ssims[11][3] =
+    {
+        REF_SSIM3(0.632704310179284323736224768455510, 0.656142764394962996739214519731364, 0.623695432557639683843678064627403),
+        REF_SSIM3(0.812020489871488534556205111362622, 0.833806350787162357242352648919526, 0.759281794789269749030825788509856),
+        REF_SSIM3(0.887343184585925132481776122903426, 0.900193557177298719130396331548299, 0.839841203125112854756330457179141),
+        REF_SSIM3(0.917532862518057468854291088845580, 0.927150885011434565745110388723764, 0.875725897714636173920241955383917),
+        REF_SSIM3(0.932316370087100937494068233667649, 0.940758268869992301433085498771311, 0.895929166769288585507716547837280),
+        REF_SSIM3(0.941901694591651686344008052769326, 0.949613464749596873985681059085839, 0.910315547642215924113321336475848),
+        REF_SSIM3(0.950265536020765764264251404832098, 0.956867349069571310531406858105857, 0.921948002082147397407795790764632),
+        REF_SSIM3(0.958682608575531426674052200491735, 0.964999380763535714345473472424178, 0.935168454162926873279122957566530),
+        REF_SSIM3(0.968258734731813074663517781413743, 0.973531508679950274656887258961033, 0.949308067470548414147073057254927),
+        REF_SSIM3(0.979172615495337753448454645197664, 0.983939620571677113813891515252583, 0.966121145307528297945637519451156),
+        REF_SSIM3(0.994401970543854668870545571477672, 0.996821890450395867787859114090260, 0.991326411687471950314318376177629)
+    };
     test_bbb("big_buck_bunny_1080_07806", impl, flags, buildSsimMap, ssims);
 }
 
