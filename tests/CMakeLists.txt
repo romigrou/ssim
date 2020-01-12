@@ -113,6 +113,7 @@ get_filename_component(RMGR_SSIM_TESTS_IMAGES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/i
 
 set(RMGR_SSIM_TESTS_FILES
     "rmgr-ssim-tests.cpp"
+    "ssim_naive.h"
     "stb_image.h"
 )
 
@@ -127,7 +128,7 @@ target_link_libraries(rmgr-ssim-tests PRIVATE
 
 target_include_directories(rmgr-ssim-tests PRIVATE ${GTEST_INCLUDE_DIRS})
 target_compile_options(rmgr-ssim-tests PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
-target_compile_definitions(rmgr-ssim-tests PRIVATE "RMGR_SSIM_TESTS_IMAGES_DIR=\"${RMGR_SSIM_TESTS_IMAGES_DIR}\"" ${RMGR_SSIM_DEFINITIONS})
+target_compile_definitions(rmgr-ssim-tests PRIVATE "RMGR_SSIM_TESTS_IMAGES_DIR=\"${RMGR_SSIM_TESTS_IMAGES_DIR}\"" ${RMGR_SSIM_DEFINITIONS} _USE_MATH_DEFINES)
 
 if (MSVC)
     # Silence warnings
