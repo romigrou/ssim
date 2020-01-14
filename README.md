@@ -86,10 +86,10 @@ was built with single or double internal precision. Those errors are relative to
 reference implementation. As you can see, the double precision is almost as precise as the `float` API allows;
 The single precision version should nonetheless precise enough for most applications.
 
-|                | Single Precision | Double Precision |
-|----------------|-----------------:|-----------------:|
-| Global SSIM    |         1.5×10⁻⁶ |         4.8×10⁻⁷ |
-| Per-pixel SSIM |         6.2×10⁻⁴ |         9.2×10⁻⁶ |
+|                  | Average<br>Global Error | Maximum<br>Global Error | Average<br>Per-Pixel Error | Maximum<br>Per-Pixel Error |
+|:-----------------|:-----------------------:|:-----------------------:|:--------------------------:|:--------------------------:|
+| Single Precision |               1.75×10⁻⁷ |               1.49×10⁻⁶ |                  5.61×10⁻⁶ |                  6.22×10⁻⁴ |
+| Double Precision |               1.31×10⁻⁷ |               4.75×10⁻⁷ |                  7.35×10⁻⁸ |                  9.21×10⁻⁶ |
 
 
 Multi-Channel Images

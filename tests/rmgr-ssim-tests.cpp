@@ -46,11 +46,11 @@ static const char* g_imagesDir = g_defaultImagesDir;
 
 
 // Floating-point type for computing reference SSIMs. The more precise, the better.
-// This being said, 128-bit float is really slooooooooooooow and therefore disabled.
+// This being said, 128-bit float being software is really too slow to be usable.
 #if defined(__SIZEOF_FLOAT128__) && 0
     typedef __float128 RefFloat;
     #define REF_TOLERANCE  DBL_EPSILON
-#elif DBL_MANT_DIG < LDBL_MANT_DIG && LDBL_MANT_DIG <= 64 // long double OK if no more than 80 bits
+#elif DBL_MANT_DIG < LDBL_MANT_DIG && LDBL_MANT_DIG <= 64 // long double OK if no more than 80 bits (otherwise likely to be software)
     typedef long double RefFloat;
     #define REF_TOLERANCE  DBL_EPSILON
 #else
@@ -72,8 +72,12 @@ struct RefSsim
 #define REF_SSIM3(val1, val2, val3)  {REF_SSIM(val1), REF_SSIM(val2), REF_SSIM(val3)}
 
 
-static RefFloat g_largestGlobalError[IMPL_COUNT] = {};
-static RefFloat g_largestPixelError[IMPL_COUNT]  = {};
+static RefFloat g_globalErrorMax[IMPL_COUNT] = {};
+static RefFloat g_globalErrorSum[IMPL_COUNT] = {};
+static RefFloat g_pixelErrorMax[IMPL_COUNT]  = {};
+static RefFloat g_pixelErrorSum[IMPL_COUNT]  = {};
+static uint64_t g_imageCount[IMPL_COUNT]     = {};
+static uint64_t g_pixelCount[IMPL_COUNT]     = {};
 
 #if RMGR_SSIM_USE_DOUBLE
     static const double GLOBAL_TOLERANCE = 5e-7f;
@@ -143,15 +147,27 @@ extern "C" int main(int argc, char** argv)
     static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX", "FMA", "Neon"};
 
     printf("\n"
-           "         ||=================|=================|\n"
-           "         ||   Global Error  | Per-Pixel Error |\n"
-           "|========||=================|=================|\n");
+           "         ||======================|======================|======================|======================|\n"
+           "         ||   Avg. Global Error  |   Max. Global Error  | Avg. Per-Pixel Error | Max. Per-Pixel Error |\n"
+           "|========||======================|======================|======================|======================|\n");
     for (unsigned impl=0; impl<IMPL_COUNT; ++impl)
     {
-        if (g_largestGlobalError[impl] != 0)
-            printf("|%-7s || %11.9Le | %11.9Le |\n", implNames[impl], static_cast<long double>(g_largestGlobalError[impl]), static_cast<long double>(g_largestPixelError[impl]));
+        if (g_imageCount[impl] != 0)
+        {
+            const long double globalErrorAvg = static_cast<long double>(g_globalErrorSum[impl] / RefFloat(g_imageCount[impl]));
+            const long double globalErrorMax = static_cast<long double>(g_globalErrorMax[impl]);
+            printf("|%-7s || %16.14Le | %16.14Le |", implNames[impl], globalErrorAvg, globalErrorMax);
+            if (g_pixelCount[impl] != 0)
+            {
+                const long double pixelErrorAvg  = static_cast<long double>(g_pixelErrorSum[impl]  / RefFloat(g_pixelCount[impl]));
+                const long double pixelErrorMax  = static_cast<long double>(g_pixelErrorMax[impl]);
+                printf(" %16.14Le | %16.14Le |\n", pixelErrorAvg, pixelErrorMax);
+            }
+            else
+                printf("                      |                      |\n");
+        }
     }
-    printf("|========||=================|=================|\n\n");
+    printf("|========||======================|======================|======================|======================|\n\n");
 
     printf("\n"
            "         ||=====================|=====================|=====================|=====================|\n"
@@ -246,18 +262,25 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
         perfInfo.ticks      += t2 - t1;
         perfInfo.pixelCount += imgWidth * imgHeight;
 
-        g_largestGlobalError[impl] = std::max(g_largestGlobalError[impl], std::abs(expected.ssim - static_cast<RefFloat>(ssim)));
+        const RefFloat globalError = std::abs(expected.ssim - static_cast<RefFloat>(ssim));
+        g_globalErrorSum[impl] += globalError;
+        g_globalErrorMax[impl]  = std::max(g_globalErrorMax[impl], globalError);
+        g_imageCount[impl]++;
+
         EXPECT_NEAR(double(expected.ssim), double(ssim), GLOBAL_TOLERANCE);
 
         if (buildSSimMap)
         {
+            g_pixelCount[impl] += imgWidth * imgHeight;
             for (int y=0; y<imgHeight; ++y)
             {
                 for (int x=0; x<imgWidth; ++x)
                 {
                     const RefFloat refPixSsim = expected.map[y*imgWidth + x];
                     const RefFloat pixSsim    = ssimMap[y*imgWidth + x];
-                    g_largestPixelError[impl] = std::max(g_largestPixelError[impl], std::abs(refPixSsim - pixSsim));
+                    const RefFloat pixError   = std::abs(refPixSsim - pixSsim);
+                    g_pixelErrorSum[impl] += pixError;
+                    g_pixelErrorMax[impl]  = std::max(g_pixelErrorMax[impl], pixError);
                     ASSERT_NEAR(double(refPixSsim), double(pixSsim), PIXEL_TOLERANCE);
                 }
             }
