@@ -34,6 +34,7 @@ else()
 endif()
 
 if (RMGR_SSIM_USE_OPENMP)
+    find_package(OpenMP)
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_OPENMP=1")
 else()
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_OPENMP=0")
@@ -65,14 +66,6 @@ if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
             endif()
         endif()
     endif()
-    if (RMGR_SSIM_USE_OPENMP)
-        set(RMGR_SSIM_OPENMP_FLAGS "-fopenmp")
-        if (CMAKE_COMPILER_IS_GNUCXX)
-            set(RMGR_SSIM_LIBOMP gomp)
-        else()
-            set(RMGR_SSIM_LIBOMP omp)
-        endif()
-    endif()
 
 elseif (MSVC)
     list(APPEND RMGR_SSIM_COMPILE_OPTIONS "/W4")
@@ -92,9 +85,6 @@ elseif (MSVC)
             set(RMGR_SSIM_NEON_FLAGS "")
         endif()
     endif()
-    if (RMGR_SSIM_USE_OPENMP)
-        set(RMGR_SSIM_OPENMP_FLAGS "/openmp")
-    endif()
 endif()
 
 
@@ -108,7 +98,9 @@ set(RMGR_SSIM_FILES
     "src/ssim_neon.cpp"
 )
 
-set_source_files_properties("src/ssim.cpp" PROPERTIES COMPILE_OPTIONS "${RMGR_SSIM_OPENMP_FLAGS}")
+if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
+    set_source_files_properties("src/ssim.cpp" PROPERTIES COMPILE_OPTIONS "${OpenMP_CXX_FLAGS}")
+endif()
 
 foreach (is sse avx fma neon)
     string(TOUPPER "${is}" ISU)
@@ -118,8 +110,8 @@ foreach (is sse avx fma neon)
         set_source_files_properties("src/ssim_${is}.cpp" PROPERTIES HEADER_FILE_ONLY TRUE)
     endif()
 endforeach()
-source_group("Source Files" FILES ${RMGR_SSIM_FILES})
 
+source_group("Source Files" FILES ${RMGR_SSIM_FILES})
 
 add_library(rmgr-ssim STATIC ${RMGR_SSIM_FILES})
 
@@ -127,7 +119,10 @@ target_include_directories(rmgr-ssim PUBLIC "include")
 #target_compile_features(rmgr-ssim PUBLIC cxx_std_11)
 target_compile_options(rmgr-ssim PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
 target_compile_definitions(rmgr-ssim PRIVATE ${RMGR_SSIM_DEFINITIONS} _USE_MATH_DEFINES)
-target_link_libraries(rmgr-ssim PRIVATE "${RMGR_SSIM_LIBOMP}")
+
+if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
+    target_link_libraries(rmgr-ssim PRIVATE OpenMP::OpenMP_CXX)
+endif()
 
 if (RMGR_SSIM_BUILD_TESTS)
     add_subdirectory(tests)
