@@ -134,7 +134,7 @@ static void multiply(Float* product, const Float* a, const Float* b, uint32_t wi
         for (uint32_t x=0; x<margin; ++x)
             product[x] = a[x] * b[x];
 
-        // SSE loop. Note that we always process in batches of 4 because we know the buffer is large enough.
+        // Neon loop. Note that we always process in batches of 4 because we know the buffer is large enough.
         const Vector* va = reinterpret_cast<const Vector*>(a + margin);
         const Vector* vb = reinterpret_cast<const Vector*>(b + margin);
         Vector*       vp = reinterpret_cast<Vector*>(product + margin);
@@ -197,7 +197,7 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 
                 int32_t xd = width;
 
-                // 8x unrolled SSE loop
+                // 8x unrolled Neon loop
                 while ((xd -= 8*VEC_SIZE) >= 0)
                 {
                     Vector d0 = VLD1(d);

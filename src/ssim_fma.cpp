@@ -115,7 +115,7 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 
 #if 0
     // Generic FMA implementation.
-    // Note that always process in batches of 8 because we know the buffer is large enough.
+    // Note that we always process in batches of 8 because we know the buffer is large enough.
 
     const int32_t kernelStride = 2*radius + 1;
 

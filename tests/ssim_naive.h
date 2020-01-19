@@ -24,7 +24,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstring>
-#ifdef __SIZEOF_FLOAT128__
+#if defined(__SIZEOF_FLOAT128__) && RMGR_COMPILER_IS_GCC
     #include <quadmath.h>
 #endif
 
@@ -56,7 +56,7 @@ inline T exp(T x) RMGR_NOEXCEPT
     return std::exp(x);
 }
 
-#ifdef __SIZEOF_FLOAT128__
+#if defined(__SIZEOF_FLOAT128__) && RMGR_COMPILER_IS_GCC
 inline __float128 exp(__float128 x)
 {
     return ::expq(x);
