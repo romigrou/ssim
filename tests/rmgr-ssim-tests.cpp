@@ -38,7 +38,7 @@ RMGR_WARNING_POP()
 #endif
 
 
-const unsigned IMPL_COUNT = 6;
+const unsigned IMPL_COUNT = 7;
 
 
 static const char  g_defaultImagesDir[] = {RMGR_SSIM_TESTS_IMAGES_DIR};
@@ -146,7 +146,7 @@ extern "C" int main(int argc, char** argv)
 
     const int result = RUN_ALL_TESTS();
 
-    static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX", "FMA", "Neon"};
+    static char const* const implNames[IMPL_COUNT] = {"Auto", "Generic", "SSE", "AVX", "FMA", "AVX-512", "Neon"};
 
     printf("\n"
            "         ||======================|======================|======================|======================|\n"
@@ -161,7 +161,7 @@ extern "C" int main(int argc, char** argv)
             printf("|%-7s || %16.14Le | %16.14Le |", implNames[impl], globalErrorAvg, globalErrorMax);
             if (g_pixelCount[impl] != 0)
             {
-                const long double pixelErrorAvg  = static_cast<long double>(g_pixelErrorSum[impl]  / RefFloat(g_pixelCount[impl]));
+                const long double pixelErrorAvg  = static_cast<long double>(g_pixelErrorSum[impl] / RefFloat(g_pixelCount[impl]));
                 const long double pixelErrorMax  = static_cast<long double>(g_pixelErrorMax[impl]);
                 printf(" %16.14Le | %16.14Le |\n", pixelErrorAvg, pixelErrorMax);
             }
@@ -452,10 +452,11 @@ static void test_bbb257(rmgr::ssim::Implementation impl, unsigned flags, bool bu
 #define TEST_GENERIC(name)  TEST_IMPL(name, generic, IMPL_GENERIC)
 
 #if RMGR_ARCH_IS_X86_ANY
-    #define TEST_X86(name)             \
-        TEST_IMPL(name, sse, IMPL_SSE) \
-        TEST_IMPL(name, avx, IMPL_AVX) \
-        TEST_IMPL(name, fma, IMPL_FMA)
+    #define TEST_X86(name)                \
+        TEST_IMPL(name, sse,    IMPL_SSE) \
+        TEST_IMPL(name, avx,    IMPL_AVX) \
+        TEST_IMPL(name, fma,    IMPL_FMA) \
+        TEST_IMPL(name, avx512, IMPL_AVX512)
 #else
     #define TEST_X86(name)
 #endif

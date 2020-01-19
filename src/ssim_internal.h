@@ -45,7 +45,8 @@ enum Implementation
     IMPL_SSE     = 2, ///< Use the SSE implementation if available
     IMPL_AVX     = 3, ///< Use the AVX implementation if available
     IMPL_FMA     = 4, ///< Use the FMA implementation if available
-    IMPL_NEON    = 5  ///< Use the Neon (or ASIMD) implementation if available
+    IMPL_AVX512  = 5, ///< Use the AVX-512 implementation if available
+    IMPL_NEON    = 6  ///< Use the Neon (or ASIMD) implementation if available
 };
 
 unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT;
@@ -79,6 +80,13 @@ namespace fma
 {
     using avx::g_multiplyFct;
     using avx::g_sumTileFct;
+    extern const GaussianBlurFct g_gaussianBlurFct;
+}
+
+namespace avx512
+{
+    using fma::g_multiplyFct;
+    using fma::g_sumTileFct;
     extern const GaussianBlurFct g_gaussianBlurFct;
 }
 

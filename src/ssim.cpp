@@ -765,29 +765,45 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
         const uint32_t ecx = regs[2];
         const uint32_t edx = regs[3];
 
-        supportedImpls |= (((edx >> sseShift) & 1) && sse::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_SSE) : 0;
-        supportedImpls |= (((ecx >> 28)       & 1) && avx::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_AVX) : 0;
-        supportedImpls |= (((ecx >> 12)       & 1) && fma::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_FMA) : 0;
+        supportedImpls |= (((edx >> sseShift) & 1) && sse::g_gaussianBlurFct!=NULL) ? (1 << IMPL_SSE) : 0;
+        supportedImpls |= (((ecx >> 28)       & 1) && avx::g_gaussianBlurFct!=NULL) ? (1 << IMPL_AVX) : 0;
+        supportedImpls |= (((ecx >> 12)       & 1) && fma::g_gaussianBlurFct!=NULL) ? (1 << IMPL_FMA) : 0;
 
-        if ((supportedImpls & (1 << IMPL_SSE)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_SSE))
-        {
-            multiplyFct     = sse::g_multiplyFct;
-            gaussianBlurFct = sse::g_gaussianBlurFct;
-            sumTileFct      = sse::g_sumTileFct;
-        }
-        if ((supportedImpls & (1 << IMPL_AVX)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_AVX))
-        {
-            multiplyFct     = avx::g_multiplyFct;
-            gaussianBlurFct = avx::g_gaussianBlurFct;
-            sumTileFct      = avx::g_sumTileFct;
-        }
-        if ((supportedImpls & (1 << IMPL_FMA)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_FMA))
-        {
-            multiplyFct     = fma::g_multiplyFct;
-            gaussianBlurFct = fma::g_gaussianBlurFct;
-            sumTileFct      = fma::g_sumTileFct;
-        }
     }
+    if (maxLeaf >= 7)
+    {
+        cpu_id(7, regs);
+        const uint32_t ebx = regs[1];
+
+        supportedImpls |= (((ebx >> 16) & 1) && avx512::g_gaussianBlurFct!=NULL) ? (1 << IMPL_AVX512) : 0;
+    }
+
+    // Select the most suitable implementation
+    if ((supportedImpls & (1 << IMPL_SSE)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_SSE))
+    {
+        multiplyFct     = sse::g_multiplyFct;
+        gaussianBlurFct = sse::g_gaussianBlurFct;
+        sumTileFct      = sse::g_sumTileFct;
+    }
+    if ((supportedImpls & (1 << IMPL_AVX)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_AVX))
+    {
+        multiplyFct     = avx::g_multiplyFct;
+        gaussianBlurFct = avx::g_gaussianBlurFct;
+        sumTileFct      = avx::g_sumTileFct;
+    }
+    if ((supportedImpls & (1 << IMPL_FMA)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_FMA))
+    {
+        multiplyFct     = fma::g_multiplyFct;
+        gaussianBlurFct = fma::g_gaussianBlurFct;
+        sumTileFct      = fma::g_sumTileFct;
+    }
+    if ((supportedImpls & (1 << IMPL_AVX512)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_AVX512))
+    {
+        multiplyFct     = avx512::g_multiplyFct;
+        gaussianBlurFct = avx512::g_gaussianBlurFct;
+        sumTileFct      = avx512::g_sumTileFct;
+    }
+
 #elif RMGR_ARCH_IS_ARM_ANY
     #ifdef __linux__
         const long hwcap = getauxval(AT_HWCAP);

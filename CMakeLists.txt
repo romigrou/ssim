@@ -60,9 +60,13 @@ if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
     check_cxx_symbol_exists("__i386__"  "" RMGR_PREDEF_I386)
     check_cxx_symbol_exists("__amd64__" "" RMGR_PREDEF_AMD64)
     if (RMGR_PREDEF_I386 OR RMGR_PREDEF_AMD64)
-        set(RMGR_SSIM_SSE_FLAGS "-msse2")
-        set(RMGR_SSIM_AVX_FLAGS "-mavx")
-        set(RMGR_SSIM_FMA_FLAGS "-mfma")
+        set(RMGR_SSIM_SSE_FLAGS    "-msse2")
+        set(RMGR_SSIM_AVX_FLAGS    "-mavx")
+        set(RMGR_SSIM_FMA_FLAGS    "-mfma")
+        set(RMGR_SSIM_AVX512_FLAGS "-mavx512f")
+        if (CMAKE_COMPILER_IS_GNUCXX AND (WIN32 OR CYGWIN))
+            list(APPEND RMGR_SSIM_AVX512_FLAGS "-fno-exceptions" "-fno-asynchronous-unwind-tables") # Fixes a build error in AVX-512 code
+        endif()
     else()
         check_cxx_symbol_exists("__aarch64__" "" RMGR_PREDEF_AARCH64)
         if (RMGR_PREDEF_AARCH64)
@@ -87,9 +91,10 @@ elseif (MSVC)
     check_cxx_symbol_exists("_M_IX86"  "" RMGR_PREDEF_M_IX86)
     check_cxx_symbol_exists("_M_AMD64" "" RMGR_PREDEF_M_AMD64)
     if (RMGR_PREDEF_M_IX86 OR RMGR_PREDEF_M_AMD64)
-        set(RMGR_SSIM_SSE_FLAGS "/arch:SSE2")
-        set(RMGR_SSIM_AVX_FLAGS "/arch:AVX")
-        set(RMGR_SSIM_FMA_FLAGS "/arch:AVX2")
+        set(RMGR_SSIM_SSE_FLAGS    "/arch:SSE2")
+        set(RMGR_SSIM_AVX_FLAGS    "/arch:AVX")
+        set(RMGR_SSIM_FMA_FLAGS    "/arch:AVX2")
+        set(RMGR_SSIM_AVX512_FLAGS "/arch:AVX512")
     else()
         check_cxx_symbol_exists("_M_ARM"   "" RMGR_PREDEF_M_ARM)
         check_cxx_symbol_exists("_M_ARM64" "" RMGR_PREDEF_M_ARM64)
@@ -109,6 +114,7 @@ set(RMGR_SSIM_FILES
     "src/ssim_internal.h"
     "src/ssim_sse.cpp"
     "src/ssim_avx.cpp"
+    "src/ssim_avx512.cpp"
     "src/ssim_fma.cpp"
     "src/ssim_neon.cpp"
 )
@@ -117,7 +123,7 @@ if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
     set_source_files_properties("src/ssim.cpp" PROPERTIES COMPILE_OPTIONS "${OpenMP_CXX_FLAGS}")
 endif()
 
-foreach (is sse avx fma neon)
+foreach (is sse avx fma neon avx512)
     string(TOUPPER "${is}" ISU)
     if (DEFINED RMGR_SSIM_${ISU}_FLAGS)
         set_source_files_properties("src/ssim_${is}.cpp" PROPERTIES COMPILE_OPTIONS "${RMGR_SSIM_${ISU}_FLAGS}")
