@@ -119,7 +119,7 @@ set(RMGR_SSIM_TESTS_FILES
 
 source_group("Source Files" FILES ${RMGR_SSIM_TESTS_FILES})
 
-add_executable(rmgr-ssim-tests ${RMGR_SSIM_TESTS_FILES})
+add_executable(rmgr-ssim-tests EXCLUDE_FROM_ALL ${RMGR_SSIM_TESTS_FILES})
 
 target_link_libraries(rmgr-ssim-tests PRIVATE
     ${GTEST_LIBRARIES}

@@ -20,6 +20,12 @@ cmake_minimum_required(VERSION 3.8)
 
 project(rmgr-ssim CXX)
 
+include(GNUInstallDirs)
+
+
+###################################################################################################
+# Options
+
 option(RMGR_SSIM_USE_DOUBLE  "Whether to use double instead of float for increased precision (but slower)" OFF)
 option(RMGR_SSIM_USE_OPENMP  "Whether to use OpenMP for multi-threaded processing"                         OFF)
 option(RMGR_SSIM_BUILD_TESTS "Whether to build rmgr::ssim's unit tests"                                    OFF)
@@ -40,7 +46,10 @@ else()
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_OPENMP=0")
 endif()
 
+
+###################################################################################################
 # Compiler-specific flags
+
 if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
     list(APPEND RMGR_SSIM_COMPILE_OPTIONS "-Wall")
 
@@ -60,9 +69,9 @@ if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
             set(RMGR_SSIM_NEON_FLAGS "-mfpu=neon")
             check_cxx_symbol_exists(__ARM_PCS_VFP "" RMGR_PREDEF_ARM_PCS_VFP)
             if (__ARM_PCS_VFP)
-                set(SCRED_ARM_COMPILE_OPTIONS "${RMGR_SSIM_NEON_FLAGS} -mfloat-abi=hard")
+                set(RMGR_SSIM_ARM_COMPILE_OPTIONS "${RMGR_SSIM_NEON_FLAGS} -mfloat-abi=hard")
             else()
-                set(SCRED_ARM_COMPILE_OPTIONS "${RMGR_SSIM_NEON_FLAGS} -mfloat-abi=softfp")
+                set(RMGR_SSIM_ARM_COMPILE_OPTIONS "${RMGR_SSIM_NEON_FLAGS} -mfloat-abi=softfp")
             endif()
         endif()
     endif()
@@ -87,6 +96,9 @@ elseif (MSVC)
     endif()
 endif()
 
+
+###################################################################################################
+# Source files
 
 set(RMGR_SSIM_FILES
     "include/rmgr/ssim.h"
@@ -113,9 +125,19 @@ endforeach()
 
 source_group("Source Files" FILES ${RMGR_SSIM_FILES})
 
+
+###################################################################################################
+# Library
+
 add_library(rmgr-ssim STATIC ${RMGR_SSIM_FILES})
 
-target_include_directories(rmgr-ssim PUBLIC "include")
+target_include_directories(rmgr-ssim
+    PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    INTERFACE
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_FULL_INCLUDE_DIR}>"
+)
+
 #target_compile_features(rmgr-ssim PUBLIC cxx_std_11)
 target_compile_options(rmgr-ssim PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
 target_compile_definitions(rmgr-ssim PRIVATE ${RMGR_SSIM_DEFINITIONS} _USE_MATH_DEFINES)
@@ -123,6 +145,24 @@ target_compile_definitions(rmgr-ssim PRIVATE ${RMGR_SSIM_DEFINITIONS} _USE_MATH_
 if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
     target_link_libraries(rmgr-ssim PRIVATE OpenMP::OpenMP_CXX)
 endif()
+
+
+###################################################################################################
+# Install rules
+
+install(TARGETS rmgr-ssim ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(DIRECTORY "include/rmgr" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+if (WIN32)
+    set(CPACK_GENERATOR "ZIP")
+else()
+    set(CPACK_GENERATOR "TGZ")
+endif()
+include(CPack)
+
+
+###################################################################################################
+# Sub-projects
 
 if (RMGR_SSIM_BUILD_TESTS)
     add_subdirectory(tests)

@@ -3,5 +3,6 @@ build
 CoverageReport-*
 doc
 lib
+package
 tests/gtest
 tests/stb_image.h
