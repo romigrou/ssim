@@ -71,6 +71,8 @@ struct RefSsim
 #define REF_SSIM(val)                {RefFloat(val##L), NULL}
 #define REF_SSIM3(val1, val2, val3)  {REF_SSIM(val1), REF_SSIM(val2), REF_SSIM(val3)}
 
+using rmgr::ssim::uint64_t;
+
 
 static RefFloat g_globalErrorMax[IMPL_COUNT] = {};
 static RefFloat g_globalErrorSum[IMPL_COUNT] = {};
