@@ -215,7 +215,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
                        RefSsim expectedSSIMs[], int maxWidth=INT_MAX, int maxHeight=INT_MAX)
 {
     const unsigned supportedImpls = rmgr::ssim::select_impl(impl);
-    ASSERT_NE(0u, supportedImpls & (1 << impl)); // Fails if instruction set not supported or support not enabled at build time
+    ASSERT_TRUE(supportedImpls & (1 << impl)) << "--- Unsupported instruction set ---"; // Fails if instruction set not supported or support not enabled at build time
     
     typedef rmgr::ssim::uint8_t uint8_t;
 
