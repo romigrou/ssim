@@ -18,7 +18,10 @@
 
 cmake_minimum_required(VERSION 3.8)
 
-project(rmgr-ssim CXX)
+project(rmgr-ssim
+    VERSION   1.0.0
+    LANGUAGES CXX
+)
 
 include(GNUInstallDirs)
 
