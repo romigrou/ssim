@@ -20,7 +20,7 @@
 
 #include "ssim_internal.h"
 
-#if !defined(__AVX__) && RMGR_COMPILER_IS_MSVC_AT_LEAST(16,0,0)
+#if !defined(__AVX__) && RMGR_ARCH_IS_X86_ANY && RMGR_COMPILER_IS_MSVC_AT_LEAST(16,0,0)
     #define __AVX__  1
 #endif
 
