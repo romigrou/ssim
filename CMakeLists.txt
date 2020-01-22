@@ -53,7 +53,7 @@ endif()
 ###################################################################################################
 # Compiler-specific flags
 
-if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
+if (CMAKE_COMPILER_IS_GNUCXX OR (CMAKE_CXX_COMPILER_ID MATCHES ".*Clang"))
     list(APPEND RMGR_SSIM_COMPILE_OPTIONS "-Wall")
 
     include(CheckCXXSymbolExists)
@@ -123,12 +123,14 @@ if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
     set_source_files_properties("src/ssim.cpp" PROPERTIES COMPILE_OPTIONS "${OpenMP_CXX_FLAGS}")
 endif()
 
+include(CheckCXXCompilerFlag)
 foreach (is sse avx fma neon avx512)
     string(TOUPPER "${is}" ISU)
-    if (DEFINED RMGR_SSIM_${ISU}_FLAGS)
-        set_source_files_properties("src/ssim_${is}.cpp" PROPERTIES COMPILE_OPTIONS "${RMGR_SSIM_${ISU}_FLAGS}")
-    else()
-        set_source_files_properties("src/ssim_${is}.cpp" PROPERTIES HEADER_FILE_ONLY TRUE)
+    if (RMGR_SSIM_${ISU}_FLAGS)
+        check_cxx_compiler_flag("${RMGR_SSIM_${ISU}_FLAGS}" RMGR_SSIM_${ISU}_FLAGS_SUPPORTED)
+        if (RMGR_SSIM_${ISU}_FLAGS_SUPPORTED)
+            set_source_files_properties("src/ssim_${is}.cpp" PROPERTIES COMPILE_OPTIONS "${RMGR_SSIM_${ISU}_FLAGS}")
+        endif()
     endif()
 endforeach()
 
