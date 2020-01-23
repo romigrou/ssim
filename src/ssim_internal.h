@@ -42,11 +42,12 @@ enum Implementation
 {
     IMPL_AUTO    = 0, ///< Automatically select the best implementation
     IMPL_GENERIC = 1, ///< Use the generic implementation
-    IMPL_SSE     = 2, ///< Use the SSE implementation if available
-    IMPL_AVX     = 3, ///< Use the AVX implementation if available
-    IMPL_FMA     = 4, ///< Use the FMA implementation if available
-    IMPL_AVX512  = 5, ///< Use the AVX-512 implementation if available
-    IMPL_NEON    = 6  ///< Use the Neon (or ASIMD) implementation if available
+    IMPL_SSE     = 2, ///< Use the SSE  implementation if available
+    IMPL_SSE2    = 3, ///< Use the SSE2 implementation if available
+    IMPL_AVX     = 4, ///< Use the AVX  implementation if available
+    IMPL_FMA     = 5, ///< Use the FMA  implementation if available
+    IMPL_AVX512  = 6, ///< Use the AVX-512 implementation if available
+    IMPL_NEON    = 7  ///< Use the Neon (or ASIMD) implementation if available
 };
 
 unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT;
@@ -63,6 +64,12 @@ typedef double (*SumTileFct)(uint32_t tileWidth, uint32_t tileHeight, uint32_t t
 
 #if RMGR_ARCH_IS_X86_ANY
 namespace sse
+{
+    extern const MultiplyFct     g_multiplyFct;
+    extern const GaussianBlurFct g_gaussianBlurFct;
+}
+
+namespace sse2
 {
     extern const MultiplyFct     g_multiplyFct;
     extern const GaussianBlurFct g_gaussianBlurFct;

@@ -79,7 +79,7 @@ namespace rmgr { namespace ssim { namespace sse
 #endif
 
 
-namespace rmgr { namespace ssim { namespace sse
+namespace rmgr { namespace ssim
 {
 
 //=================================================================================================
@@ -122,7 +122,12 @@ static void multiply(Float* product, const Float* a, const Float* b, uint32_t wi
 }
 
 
-const MultiplyFct g_multiplyFct = multiply;
+const MultiplyFct sse2::g_multiplyFct = multiply;
+#if RMGR_SSIM_USE_DOUBLE
+const MultiplyFct sse::g_multiplyFct  = NULL;
+#else
+const MultiplyFct sse::g_multiplyFct  = multiply;
+#endif
 
 
 //=================================================================================================
@@ -304,16 +309,26 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 }
 
 
-const GaussianBlurFct g_gaussianBlurFct = gaussian_blur;
+const GaussianBlurFct sse2::g_gaussianBlurFct = gaussian_blur;
+#if RMGR_SSIM_USE_DOUBLE
+const GaussianBlurFct sse::g_gaussianBlurFct  = NULL;
+#else
+const GaussianBlurFct sse::g_gaussianBlurFct  = gaussian_blur;
+#endif
 
 
 //=================================================================================================
 // sum_tile()
 
-#ifdef __SSE2__
-double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
-                const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
-                float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
+#ifndef __SSE2__
+
+const SumTileFct g_sumTileFct = NULL;
+
+#else
+
+static double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
+                       const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
+                       float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
 #if RMGR_SSIM_USE_DOUBLE
     assert(ssimTile == NULL);
@@ -414,15 +429,11 @@ double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Fl
     return tileSum;
 }
 
-const SumTileFct g_sumTileFct = sum_tile;
-
-#else
-
-const SumTileFct g_sumTileFct = NULL;
+const SumTileFct sse2::g_sumTileFct = sum_tile;
 #endif // __SSE2__
 
 
-}}} // namespace rmgr::ssim::sse
+}} // namespace rmgr::ssim
 
 #endif // __SSE__
 #endif // RMGR_ARCH_IS_X86_ANY

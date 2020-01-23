@@ -749,12 +749,6 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
     SumTileFct      sumTileFct      = NULL;
 
 #if RMGR_ARCH_IS_X86_ANY
-    #if RMGR_SSIM_USE_DOUBLE
-        const unsigned sseShift = 26; // SSE2 (required for doubles)
-    #else
-        const unsigned sseShift = 25; // SSE
-    #endif
-
     // Detect machine's features
     int regs[4] = {};
     cpu_id(0, regs);
@@ -765,9 +759,10 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
         const uint32_t ecx = regs[2];
         const uint32_t edx = regs[3];
 
-        supportedImpls |= (((edx >> sseShift) & 1) && sse::g_gaussianBlurFct!=NULL) ? (1 << IMPL_SSE) : 0;
-        supportedImpls |= (((ecx >> 28)       & 1) && avx::g_gaussianBlurFct!=NULL) ? (1 << IMPL_AVX) : 0;
-        supportedImpls |= (((ecx >> 12)       & 1) && fma::g_gaussianBlurFct!=NULL) ? (1 << IMPL_FMA) : 0;
+        supportedImpls |= (((edx >> 25) & 1) && sse::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_SSE)  : 0;
+        supportedImpls |= (((edx >> 26) & 1) && sse2::g_gaussianBlurFct!=NULL) ? (1 << IMPL_SSE2) : 0;
+        supportedImpls |= (((ecx >> 28) & 1) && avx::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_AVX)  : 0;
+        supportedImpls |= (((ecx >> 12) & 1) && fma::g_gaussianBlurFct!=NULL)  ? (1 << IMPL_FMA)  : 0;
 
     }
     if (maxLeaf >= 7)
@@ -783,7 +778,12 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
     {
         multiplyFct     = sse::g_multiplyFct;
         gaussianBlurFct = sse::g_gaussianBlurFct;
-        sumTileFct      = sse::g_sumTileFct;
+    }
+    if ((supportedImpls & (1 << IMPL_SSE2)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_SSE2))
+    {
+        multiplyFct     = sse2::g_multiplyFct;
+        gaussianBlurFct = sse2::g_gaussianBlurFct;
+        sumTileFct      = sse2::g_sumTileFct;
     }
     if ((supportedImpls & (1 << IMPL_AVX)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_AVX))
     {
