@@ -20,6 +20,8 @@
 
 #include "ssim_internal.h"
 
+#if RMGR_ARCH_IS_X86_ANY
+
 #if !defined(__AVX512F__) || 1 // Disable AVX-152 until it has been tested
 
 namespace rmgr { namespace ssim { namespace avx512
@@ -236,4 +238,5 @@ const GaussianBlurFct g_gaussianBlurFct = gaussian_blur;
 
 }}} // namespace rmgr::ssim::avx512
 
-#endif
+#endif // __AVX512F__
+#endif // RMGR_ARCH_IS_X86_ANY

@@ -20,7 +20,9 @@
 
 #include "ssim_internal.h"
 
-#if !defined(__AVX__) && RMGR_ARCH_IS_X86_ANY && RMGR_COMPILER_IS_MSVC_AT_LEAST(16,0,0)
+#if RMGR_ARCH_IS_X86_ANY
+
+#if !defined(__AVX__) && RMGR_COMPILER_IS_MSVC_AT_LEAST(16,0,0)
     #define __AVX__  1
 #endif
 
@@ -409,4 +411,5 @@ const SumTileFct g_sumTileFct = sum_tile;
 
 }}} // namespace rmgr::ssim::avx
 
-#endif
+#endif // __AVX__
+#endif // RMGR_ARCH_IS_X86_ANY

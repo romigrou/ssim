@@ -20,6 +20,7 @@
 
 #include "ssim_internal.h"
 
+#if RMGR_ARCH_IS_ARM_ANY
 #if !defined(__ARM_NEON) && ((RMGR_COMPILER_IS_MSVC_AT_LEAST(17,0,0) && RMGR_ARCH_IS_ARM_32) || (RMGR_COMPILER_IS_MSVC_AT_LEAST(19,20,0) && RMGR_ARCH_IS_ARM_64))
     #define __ARM_NEON  1
 #endif
@@ -481,4 +482,5 @@ const SumTileFct g_sumTileFct = NULL;
 
 }}} // namespace rmgr::ssim::neon
 
-#endif
+#endif // __ARM_NEON
+#endif // RMGR_ARCH_IS_ARM_ANY

@@ -20,7 +20,9 @@
 
 #include "ssim_internal.h"
 
-#if !defined(__FMA__) && RMGR_ARCH_IS_X86_ANY && RMGR_COMPILER_IS_MSVC_AT_LEAST(18,0,0)
+#if RMGR_ARCH_IS_X86_ANY
+
+#if !defined(__FMA__) && RMGR_COMPILER_IS_MSVC_AT_LEAST(18,0,0)
     #define __FMA__  1
 #endif
 
@@ -274,4 +276,5 @@ const GaussianBlurFct g_gaussianBlurFct = gaussian_blur;
 
 }}} // namespace rmgr::ssim::fma
 
-#endif
+#endif // __FMA__
+#endif // RMGR_ARCH_IS_X86_ANY
