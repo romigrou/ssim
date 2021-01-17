@@ -96,11 +96,11 @@ namespace rmgr { namespace ssim { namespace neon
 // even though we specify the corresponding intrinsics. Let's force it to do so.
 // Note: haven't tried with GCC...
 #if RMGR_COMPILER_IS_CLANG
- #if RMGR_ARCH_IS_ARM_64 // Somehow, using the intrinsic for vmul yields better code in 32-bit mode
-    #undef VMUL_LANE
+#if RMGR_ARCH_IS_ARM_64 // Somehow, using the intrinsic for vmul yields better code in 32-bit mode
+    #undef  VMUL_LANE
     #define VMUL_LANE(res,...)  VMUL_LANE_ASM(res, __VA_ARGS__)
 #endif
-    #undef VMLA_LANE
+    #undef  VMLA_LANE
     #define VMLA_LANE(acc,...)  VMLA_LANE_ASM(acc, __VA_ARGS__)
     #if RMGR_ARCH_IS_ARM_32
         #define REGISTER(r32, r64, type, name)  register type name __asm__(#r32)

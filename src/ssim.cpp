@@ -148,6 +148,24 @@ namespace rmgr { namespace ssim
 
 
 //=================================================================================================
+// Constants
+
+static const unsigned GAUSSIAN_RADIUS = 5;
+static const Float    GAUSSIAN_SIGMA  = 1.5;
+
+static const uint32_t TILE_MAX_WIDTH   = 256 / (sizeof(Float) / sizeof(float));
+static const uint32_t TILE_MAX_HEIGHT  =  64;
+static const uint32_t HORZ_MARGIN      = GAUSSIAN_RADIUS;
+static const uint32_t VERT_MARGIN      = 2 * GAUSSIAN_RADIUS; // The blur routines require an extra write margin vertically (but the read margin is equal to the radius)
+static const size_t   BUFFER_ALIGNMENT = RMGR_SSIM_TILE_ALIGNMENT / sizeof(Float);
+static const size_t   ROW_ALIGNMENT    = BUFFER_ALIGNMENT;
+static const uint32_t BUFFER_WIDTH     = TILE_MAX_WIDTH  + 2 * HORZ_MARGIN;
+static const uint32_t BUFFER_HEIGHT    = TILE_MAX_HEIGHT + 2 * VERT_MARGIN;
+static const size_t   BUFFER_STRIDE    = ALIGN_UP(BUFFER_WIDTH, ROW_ALIGNMENT);
+static const size_t   BUFFER_CAPACITY  = ALIGN_UP(BUFFER_STRIDE * BUFFER_HEIGHT + ROW_ALIGNMENT-1, BUFFER_ALIGNMENT);
+
+
+//=================================================================================================
 // Allocators
 
 
@@ -717,10 +735,9 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
 };
 
 
-template<unsigned BC>
 double process_tile_on_stack(uint32_t tileX, uint32_t tileY, const GlobalParams& gp)
 {
-    RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][BC]);
+    RMGR_ALIGNED_VAR(RMGR_SSIM_TILE_ALIGNMENT, Float, buffers[6][BUFFER_CAPACITY]);
     const TileParams tp = {{buffers[0],buffers[1],buffers[2],buffers[3],buffers[4],buffers[5]}, tileX, tileY};
     return process_tile(tp, gp);
 }
@@ -832,13 +849,44 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
 
 
 //=================================================================================================
+// Threaded processing
+
+struct ThreadParams
+{
+    double              value;
+    const GlobalParams* globalParams;
+    unsigned            tileHorzCount;
+    TileParams          tileParams;
+};
+
+
+static void process_tile_in_thread(void* arg, unsigned tileNum)
+{
+    ThreadParams& p = *static_cast<ThreadParams*>(arg);
+    p.tileParams.tileX = (tileNum % p.tileHorzCount) * p.globalParams->tileMaxWidth;
+    p.tileParams.tileY = (tileNum / p.tileHorzCount) * p.globalParams->tileMaxHeight;
+    p.value += process_tile(p.tileParams, *p.globalParams);
+}
+
+
+static void process_tile_on_stack_in_thread(void* arg, unsigned tileNum)
+{
+    ThreadParams& p = *static_cast<ThreadParams*>(arg);
+    unsigned tileX = (tileNum % p.tileHorzCount) * p.globalParams->tileMaxWidth;
+    unsigned tileY = (tileNum / p.tileHorzCount) * p.globalParams->tileMaxHeight;
+    p.value += process_tile_on_stack(tileX, tileY, *p.globalParams);
+}
+
+
+//=================================================================================================
 // Main function
 
 
 float compute_ssim(uint32_t width, uint32_t height,
                    const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
                    const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags) RMGR_NOEXCEPT
+                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride,
+                   ThreadPoolFct threadPool, unsigned threadCount, unsigned flags) RMGR_NOEXCEPT
 {
     MultiplyFct     multiplyFct     = g_multiplyFct;
     GaussianBlurFct gaussianBlurFct = g_gaussianBlurFct;
@@ -873,6 +921,12 @@ float compute_ssim(uint32_t width, uint32_t height,
         return -EINVAL;
     }
 
+    if (threadPool != NULL && threadCount == 0u)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: threadCount cannot be 0 if threadPool is not NULL\n");
+        return -EINVAL;
+    }
+
     if (ssimMap == NULL)
     {
         ssimStep   = 0;
@@ -880,23 +934,10 @@ float compute_ssim(uint32_t width, uint32_t height,
     }
 
     // Parameters of the gaussian blur
-    const unsigned gaussianRadius = 5;
-    const Float    gaussianSigma  = 1.5;
-    Float kernelBuffer[(2*gaussianRadius+1) * (2*gaussianRadius+1)];
-    precompute_gaussian_kernel(kernelBuffer, gaussianRadius, gaussianSigma);
+    Float kernelBuffer[(2*GAUSSIAN_RADIUS+1) * (2*GAUSSIAN_RADIUS+1)];
+    precompute_gaussian_kernel(kernelBuffer, GAUSSIAN_RADIUS, GAUSSIAN_SIGMA);
 
-    const Float* gaussianKernel = kernelBuffer + gaussianRadius * (2*gaussianRadius+1) + gaussianRadius; // Center of the kernel
-
-    const uint32_t tileMaxWidth    = 256 / (sizeof(Float) / sizeof(float));
-    const uint32_t tileMaxHeight   =  64;
-    const uint32_t horzMargin      = gaussianRadius;
-    const uint32_t vertMargin      = 2 * gaussianRadius; // The blur routines require an extra write margin vertically (but the read margin is equal to the radius)
-    const size_t   bufferAlignment = RMGR_SSIM_TILE_ALIGNMENT / sizeof(Float);
-    const size_t   rowAlignment    = bufferAlignment;
-    const uint32_t bufferWidth     = tileMaxWidth  + 2*horzMargin;
-    const uint32_t bufferHeight    = tileMaxHeight + 2*vertMargin;
-    const size_t   bufferStride    = ALIGN_UP(bufferWidth, rowAlignment);
-    const size_t   bufferCapacity  = ALIGN_UP(bufferStride*bufferHeight + rowAlignment-1, bufferAlignment);
+    Float const* const gaussianKernel = kernelBuffer + GAUSSIAN_RADIUS * (2*GAUSSIAN_RADIUS+1) + GAUSSIAN_RADIUS; // Center of the kernel
 
     // Prepare global parameters
     const GlobalParams gp =
@@ -915,14 +956,14 @@ float compute_ssim(uint32_t width, uint32_t height,
         ssimStride,
 
         // Other parameters
-        tileMaxWidth,
-        tileMaxHeight,
-        horzMargin,
-        vertMargin,
-        rowAlignment,
-        bufferCapacity,
+        TILE_MAX_WIDTH,
+        TILE_MAX_HEIGHT,
+        HORZ_MARGIN,
+        VERT_MARGIN,
+        ROW_ALIGNMENT,
+        BUFFER_CAPACITY,
         gaussianKernel,
-        gaussianRadius,
+        GAUSSIAN_RADIUS,
         c1,
         c2,
         multiplyFct,
@@ -930,60 +971,51 @@ float compute_ssim(uint32_t width, uint32_t height,
         sumTileFct
     };
 
-#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
-    const int maxThreadcount = sizeof(void*) * CHAR_BIT; // Good heuristic
-    const int tileHorzCount  = (width  + tileMaxWidth  - 1) / tileMaxWidth;
-    const int tileVertCount  = (height + tileMaxHeight - 1) / tileMaxHeight;
-    const int tileCount      = tileHorzCount * tileVertCount;
-    const int threadCount    = (flags & FLAG_OPENMP) ? std::min(tileCount, omp_get_num_procs()) : 1;
-    struct ThreadSum
-    {
-        double value;
-        char   padding[RMGR_SSIM_CACHE_LINE_SIZE - sizeof(double)];
-    };
-    ThreadSum threadSums[maxThreadcount] = {};
-#else
-    const int threadCount = 1;
-    if (flags & FLAG_OPENMP)
-    {
-        RMGR_SSIM_REPORT_ERROR("[rmgr::ssim] FLAG_OPENMP was specified but OpenMP support was not enabled at build time\n");
-    }
-#endif
+    const unsigned maxThreadCount    = sizeof(void*) * CHAR_BIT; // Good heuristic
+    const unsigned tileHorzCount     = (width  + TILE_MAX_WIDTH  - 1) / TILE_MAX_WIDTH;
+    const unsigned tileVertCount     = (height + TILE_MAX_HEIGHT - 1) / TILE_MAX_HEIGHT;
+    const unsigned tileCount         = tileHorzCount * tileVertCount;
+    const unsigned actualThreadCount = (threadPool != NULL) ? std::min(threadCount, maxThreadCount) : 1;
 
+    // Prepare thread params
+    ThreadParams threadParams[maxThreadCount] = {};
+    void*        threadArgs[maxThreadCount]   = {};
+    if (threadPool != NULL)
+    {
+        for (unsigned threadNum=0; threadNum < actualThreadCount; ++threadNum)
+        {
+            ThreadParams& p = threadParams[threadNum];
+            p.tileHorzCount = tileHorzCount;
+            p.globalParams  = &gp;
+            threadArgs[threadNum] = &threadParams[threadNum];
+        }
+    }
+
+    // Process all tiles
     double sum = 0.0;
+    int threadPoolResult = 0;
     if (flags & FLAG_HEAP_BUFFERS)
     {
-        Float* heapBuffer = static_cast<Float*>(alloc(6 * bufferCapacity * threadCount * sizeof(Float), RMGR_SSIM_TILE_ALIGNMENT));
+        Float* heapBuffer = static_cast<Float*>(alloc(6 * BUFFER_CAPACITY * actualThreadCount * sizeof(Float), RMGR_SSIM_TILE_ALIGNMENT));
         if (heapBuffer == NULL)
             return -ENOMEM;
 
-#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
-        if (flags & FLAG_OPENMP)
+        if (threadPool != NULL)
         {
-            Float* buffers[maxThreadcount][6];
-            for (int threadNum=0; threadNum<threadCount; ++threadNum)
-                for (int i=0; i<6; ++i)
-                    buffers[threadNum][i] = heapBuffer + (6*threadNum + i) * bufferCapacity;
-
-            #pragma omp parallel for num_threads(threadCount)
-            for (int tileNum=0; tileNum<tileCount; ++tileNum)
+            for (unsigned threadNum=0; threadNum < actualThreadCount; ++threadNum)
             {
-                const int      threadNum = omp_get_thread_num();
-                const uint32_t tileX     = (unsigned(tileNum) % tileHorzCount) * tileMaxWidth;
-                const uint32_t tileY     = (unsigned(tileNum) / tileHorzCount) * tileMaxHeight;
-                Float**        b         = buffers[threadNum];
-                const TileParams tp = {{b[0],b[1],b[2],b[3],b[4],b[5]}, tileX, tileY};
-                threadSums[threadNum].value += process_tile(tp, gp);
+                for (int i=0; i<6; ++i)
+                    threadParams[threadNum].tileParams.buffers[i] = heapBuffer + (6*threadNum + i) * BUFFER_CAPACITY;
             }
+            threadPoolResult = threadPool(process_tile_in_thread, threadArgs, actualThreadCount, tileCount);
         }
         else
-#endif
         {
-            for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
+            for (uint32_t tileY=0; tileY<height; tileY+=TILE_MAX_HEIGHT)
             {
-                for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
+                for (uint32_t tileX=0; tileX<width; tileX+=TILE_MAX_WIDTH)
                 {
-                    #define b(n) (heapBuffer + bufferCapacity * n)
+                    #define b(n) (heapBuffer + BUFFER_CAPACITY * n)
                     const TileParams tp = {{b(0),b(1),b(2),b(3),b(4),b(5)}, tileX, tileY};
                     sum += process_tile(tp, gp);
                     #undef b
@@ -994,34 +1026,24 @@ float compute_ssim(uint32_t width, uint32_t height,
     }
     else
     {
-#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
-        if (flags & FLAG_OPENMP)
-        {
-            #pragma omp parallel for num_threads(threadCount)
-            for (int tileNum=0; tileNum<tileCount; ++tileNum)
-            {
-                const int      threadNum = omp_get_thread_num();
-                const uint32_t tileX     = (unsigned(tileNum) % tileHorzCount) * tileMaxWidth;
-                const uint32_t tileY     = (unsigned(tileNum) / tileHorzCount) * tileMaxHeight;
-                threadSums[threadNum].value += process_tile_on_stack<bufferCapacity>(tileX, tileY, gp);
-            }
-        }
+        if (threadPool != NULL)
+            threadPoolResult = threadPool(process_tile_on_stack_in_thread, threadArgs, actualThreadCount, tileCount);
         else
-#endif
         {
-            for (uint32_t tileY=0; tileY<height; tileY+=tileMaxHeight)
-                for (uint32_t tileX=0; tileX<width; tileX+=tileMaxWidth)
-                    sum += process_tile_on_stack<bufferCapacity>(tileX, tileY, gp);
+            for (uint32_t tileY=0; tileY<height; tileY+=TILE_MAX_HEIGHT)
+                for (uint32_t tileX=0; tileX<width; tileX+=TILE_MAX_WIDTH)
+                    sum += process_tile_on_stack(tileX, tileY, gp);
         }
     }
 
-#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
-    if (flags & FLAG_OPENMP)
+    // In case of threaded processing, perform the final sum
+    if (threadPool != NULL)
     {
-        for (int threadNum=0; threadNum<threadCount; ++threadNum)
-            sum += threadSums[threadNum].value;
+        if (threadPoolResult != 0)
+            return -ECHILD;
+        for (unsigned threadNum=0; threadNum<actualThreadCount; ++threadNum)
+            sum += threadParams[threadNum].value;
     }
-#endif
 
     return float(sum / double(width * height));
 }

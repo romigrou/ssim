@@ -20,6 +20,7 @@
 
 #include "ssim_naive.h"
 #include <rmgr/ssim.h>
+#include <rmgr/ssim-openmp.h>
 #include "../src/ssim_internal.h"
 #include <gtest/gtest.h>
 
@@ -211,8 +212,8 @@ extern "C" int main(int argc, char** argv)
 }
 
 
-void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Implementation impl, unsigned flags, bool buildSSimMap,
-                       RefSsim expectedSSIMs[], int maxWidth=INT_MAX, int maxHeight=INT_MAX)
+void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Implementation impl, bool openmp, unsigned flags,
+                       bool buildSSimMap, RefSsim expectedSSIMs[], int maxWidth=INT_MAX, int maxHeight=INT_MAX)
 {
     const unsigned supportedImpls = rmgr::ssim::select_impl(impl);
     ASSERT_TRUE(supportedImpls & (1 << impl)) << "--- Unsupported instruction set ---"; // Fails if instruction set not supported or support not enabled at build time
@@ -245,7 +246,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
         ASSERT_NE(ssimMap, static_cast<float*>(NULL));
     }
 
-    PerfInfo& perfInfo = g_perfInfo[impl][flags * 2 + !!buildSSimMap];
+    PerfInfo& perfInfo = g_perfInfo[impl][(4 * !!openmp) + (2 * flags) + !!buildSSimMap];
 
     for (int channel=0; channel<refChannels; ++channel)
     {
@@ -265,7 +266,11 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
         }
 
         Ticks t1 = get_ticks();
-        const float ssim = rmgr::ssim::compute_ssim(imgWidth, imgHeight, refData+channel, refChannels, refStride, imgData+channel, imgChannels, imgStride, ssimMap, 1, imgWidth, flags);
+        float ssim;
+        if (openmp)
+            ssim = rmgr::ssim::compute_ssim_openmp(imgWidth, imgHeight, refData+channel, refChannels, refStride, imgData+channel, imgChannels, imgStride, ssimMap, 1, imgWidth, flags);
+        else
+            ssim = rmgr::ssim::compute_ssim(imgWidth, imgHeight, refData+channel, refChannels, refStride, imgData+channel, imgChannels, imgStride, ssimMap, 1, imgWidth, flags);
         Ticks t2 = get_ticks();
         perfInfo.ticks      += t2 - t1;
         perfInfo.pixelCount += imgWidth * imgHeight;
@@ -303,7 +308,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
 }
 
 
-static void test_einstein(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_einstein(rmgr::ssim::Implementation impl, bool openmp, unsigned flags, bool buildSsimMap)
 {
     // These are the examples from the original SSIM page
     static char const* const files[] =
@@ -333,12 +338,12 @@ static void test_einstein(rmgr::ssim::Implementation impl, unsigned flags, bool 
     {
         char imgPath[256];
         snprintf(imgPath, sizeof(imgPath), "%s/%s", g_imagesDir, files[i]);
-        test_compute_ssim(imgPath, refPath, impl, flags, buildSsimMap, ssims+i);
+        test_compute_ssim(imgPath, refPath, impl, openmp, flags, buildSsimMap, ssims+i);
     }
 }
 
 
-static void test_bbb(const char* stub, rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap, RefSsim expectedSSIMs[11][3], int maxWidth=INT_MAX, int maxHeight=INT_MAX)
+static void test_bbb(const char* stub, rmgr::ssim::Implementation impl, bool openmp, unsigned flags, bool buildSsimMap, RefSsim expectedSSIMs[11][3], int maxWidth=INT_MAX, int maxHeight=INT_MAX)
 {
     char pngPath[256];
     snprintf(pngPath, sizeof(pngPath), "%s/%s.png", g_imagesDir, stub);
@@ -348,12 +353,12 @@ static void test_bbb(const char* stub, rmgr::ssim::Implementation impl, unsigned
         char jpgPath[256];
         snprintf(jpgPath, sizeof(jpgPath), "%s/%s_%02d.jpg", g_imagesDir, stub, jpgQuality);
         SCOPED_TRACE(jpgPath);
-        test_compute_ssim(jpgPath, pngPath, impl, flags, buildSsimMap, *expectedSSIMs++, maxWidth, maxHeight);
+        test_compute_ssim(jpgPath, pngPath, impl, openmp, flags, buildSsimMap, *expectedSSIMs++, maxWidth, maxHeight);
     }
 }
 
 
-static void test_bbb360(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_bbb360(rmgr::ssim::Implementation impl, bool openmp, unsigned flags, bool buildSsimMap)
 {
     static RefSsim ssims[11][3] =
     {
@@ -369,11 +374,11 @@ static void test_bbb360(rmgr::ssim::Implementation impl, unsigned flags, bool bu
         REF_SSIM3(0.975073770491180460911502834692628, 0.981018317368407488675155659617660, 0.941232778962792419573339542702927),
         REF_SSIM3(0.996208334080668590937537440614104, 0.997984057353425511310232130540623, 0.993268256918489063772002792895026)
     };
-    test_bbb("big_buck_bunny_360_07806", impl, flags, buildSsimMap, ssims);
+    test_bbb("big_buck_bunny_360_07806", impl, openmp, flags, buildSsimMap, ssims);
 }
 
 
-static void test_bbb1080(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_bbb1080(rmgr::ssim::Implementation impl, bool openmp, unsigned flags, bool buildSsimMap)
 {
     static RefSsim ssims[11][3] =
     {
@@ -389,11 +394,11 @@ static void test_bbb1080(rmgr::ssim::Implementation impl, unsigned flags, bool b
         REF_SSIM3(0.979172615495337753448454645197664, 0.983939620571677113813891515252583, 0.966121145307528297945637519451156),
         REF_SSIM3(0.994401970543854668870545571477672, 0.996821890450395867787859114090260, 0.991326411687471950314318376177629)
     };
-    test_bbb("big_buck_bunny_1080_07806", impl, flags, buildSsimMap, ssims);
+    test_bbb("big_buck_bunny_1080_07806", impl, openmp, flags, buildSsimMap, ssims);
 }
 
 
-static void test_bbb255(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_bbb255(rmgr::ssim::Implementation impl, bool openmp, unsigned flags, bool buildSsimMap)
 {
     static RefSsim ssims[11][3] =
     {
@@ -409,11 +414,11 @@ static void test_bbb255(rmgr::ssim::Implementation impl, unsigned flags, bool bu
         REF_SSIM3(0.980592553796793365988164175595120,0.988459119584828780495244400755345,0.895953581733139167807368721794607),
         REF_SSIM3(0.995554150150431506932530273805506,0.998351279973895838869633438367112,0.990122638569351284864292289804271)
     };
-    test_bbb("big_buck_bunny_360_07806", impl, flags, buildSsimMap, ssims, 255, 63);
+    test_bbb("big_buck_bunny_360_07806", impl, openmp, flags, buildSsimMap, ssims, 255, 63);
 }
 
 
-static void test_bbb257(rmgr::ssim::Implementation impl, unsigned flags, bool buildSsimMap)
+static void test_bbb257(rmgr::ssim::Implementation impl, bool openmp, unsigned flags, bool buildSsimMap)
 {
     static RefSsim ssims[11][3] =
     {
@@ -429,23 +434,23 @@ static void test_bbb257(rmgr::ssim::Implementation impl, unsigned flags, bool bu
         REF_SSIM3(0.980170770627140053380079376401973, 0.988310804353821863074583296682297, 0.895185108784727410716995229679136),
         REF_SSIM3(0.995509458704857621204542425874914, 0.998331030868806375721824867748273, 0.990080646740585025047375788822065)
     };
-    test_bbb("big_buck_bunny_360_07806", impl, flags, buildSsimMap, ssims, 257, 65);
+    test_bbb("big_buck_bunny_360_07806", impl, openmp, flags, buildSsimMap, ssims, 257, 65);
 }
 
 
-#define DO_TEST_IMPL(name, impl, IMPL, suffix, flags)                                                                      \
-    TEST(name, impl##_stack##suffix)        {test_##name(rmgr::ssim::IMPL, (flags),                               true);}  \
-    TEST(name, impl##_heap##suffix)         {test_##name(rmgr::ssim::IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, true);}  \
-    TEST(name, impl##_stack_nomap##suffix)  {test_##name(rmgr::ssim::IMPL, (flags),                               false);} \
-    TEST(name, impl##_heap_nomap##suffix)   {test_##name(rmgr::ssim::IMPL, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, false);}
+#define DO_TEST_IMPL(name, impl, IMPL, suffix, omp, flags)                                                                      \
+    TEST(name, impl##_stack##suffix)        {test_##name(rmgr::ssim::IMPL, omp, (flags),                               true);}  \
+    TEST(name, impl##_heap##suffix)         {test_##name(rmgr::ssim::IMPL, omp, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, true);}  \
+    TEST(name, impl##_stack_nomap##suffix)  {test_##name(rmgr::ssim::IMPL, omp, (flags),                               false);} \
+    TEST(name, impl##_heap_nomap##suffix)   {test_##name(rmgr::ssim::IMPL, omp, (flags)|rmgr::ssim::FLAG_HEAP_BUFFERS, false);}
 
 
 #if RMGR_SSIM_USE_OPENMP
-    #define TEST_IMPL(name, impl, IMPL)            \
-        DO_TEST_IMPL(name, impl, IMPL, ,        0) \
-        DO_TEST_IMPL(name, impl, IMPL, _openmp, rmgr::ssim::FLAG_OPENMP)
+    #define TEST_IMPL(name, impl, IMPL)                   \
+        DO_TEST_IMPL(name, impl, IMPL, ,        false, 0) \
+        DO_TEST_IMPL(name, impl, IMPL, _openmp, true,  0)
 #else
-    #define TEST_IMPL(name, impl, IMPL)  DO_TEST_IMPL(name, impl, IMPL, , 0)
+    #define TEST_IMPL(name, impl, IMPL)  DO_TEST_IMPL(name, impl, IMPL, , false, 0)
 #endif
 
 #define TEST_AUTO(name)     TEST_IMPL(name, auto,    IMPL_AUTO)

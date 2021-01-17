@@ -68,7 +68,7 @@ if (TARGET gtest)
 else()
     find_package(GTest)
     if (NOT GTEST_FOUND)
-        set(GTEST_VERSION 1.8.1)
+        set(GTEST_VERSION 1.10.0)
         set(GTEST_DIR     "${CMAKE_CURRENT_SOURCE_DIR}/gtest/googletest-release-${GTEST_VERSION}")
         set(GTEST_URL     "https://github.com/google/googletest/archive/release-${GTEST_VERSION}.tar.gz")
 
@@ -90,7 +90,7 @@ endif()
 ###############################################################################
 # stb_image
 
-set(STBI_HASH "f67165c2bb2af3060ecae7d20d6f731173485ad0")
+set(STBI_HASH "e140649ccf40818781b7e408f6228a486f6d254b")
 set(STBI_URL  "https://raw.githubusercontent.com/nothings/stb/${STBI_HASH}/stb_image.h")
 set(STBI_PATH "${CMAKE_CURRENT_SOURCE_DIR}/stb_image.h")
 if (NOT EXISTS "${STBI_PATH}")
@@ -125,6 +125,11 @@ target_link_libraries(rmgr-ssim-tests PRIVATE
     ${GTEST_LIBRARIES}
     rmgr-ssim
 )
+
+if (RMGR_SSIM_USE_OPENMP)
+    target_link_libraries(rmgr-ssim-tests PRIVATE rmgr-ssim-openmp)
+endif()
+
 
 target_include_directories(rmgr-ssim-tests PRIVATE ${GTEST_INCLUDE_DIRS})
 target_compile_options(rmgr-ssim-tests PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})

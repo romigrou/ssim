@@ -154,15 +154,29 @@ target_compile_options(rmgr-ssim PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
 target_compile_definitions(rmgr-ssim PRIVATE ${RMGR_SSIM_DEFINITIONS} _USE_MATH_DEFINES)
 
 if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
-    target_link_libraries(rmgr-ssim PRIVATE OpenMP::OpenMP_CXX)
+    set(RMGR_SSIM_OPENMP_FILES
+        "include/rmgr/ssim-openmp.h"
+        "src/ssim-openmp.cpp"
+    )
+    source_group("Source Files" FILES ${RMGR_SSIM_OPENMP_FILES})
+
+    add_library(rmgr-ssim-openmp ${RMGR_SSIM_OPENMP_FILES})
+
+    target_link_libraries(rmgr-ssim-openmp
+        PUBLIC  rmgr-ssim
+        PRIVATE OpenMP::OpenMP_CXX
+    )
 endif()
 
 
 ###################################################################################################
 # Install rules
 
-install(TARGETS rmgr-ssim ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
-install(DIRECTORY "include/rmgr" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(TARGETS rmgr-ssim ARCHIVE     DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(FILES   "include/rmgr/ssim.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/rmgr")
+if (TARGET rmgr-ssim-openmp)
+    install(FILES "include/rmgr/ssim-openmp.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/rmgr")
+endif()
 
 if (WIN32)
     set(CPACK_GENERATOR "ZIP")
