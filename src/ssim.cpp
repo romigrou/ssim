@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Romain Bailly
+ * Copyright (c) 2021, Romain Bailly
  *
  * This software is provided 'as-is', without any express or implied
  * warranty. In no event will the authors be held liable for any damages
@@ -414,11 +414,11 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
             s_4 = s_3;
             s_3 = s_2;
             s_2 = s_1;
-            s_1 = s0; 
-            s0  = s1; 
-            s1  = s2; 
-            s2  = s3; 
-            s3  = s4; 
+            s_1 = s0;
+            s0  = s1;
+            s1  = s2;
+            s2  = s3;
+            s3  = s4;
             s4  = s5;
 #endif
 

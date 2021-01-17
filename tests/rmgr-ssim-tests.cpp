@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Romain Bailly
+ * Copyright (c) 2021, Romain Bailly
  *
  * This software is provided 'as-is', without any express or implied
  * warranty. In no event will the authors be held liable for any damages
@@ -88,7 +88,7 @@ static uint64_t g_pixelCount[IMPL_COUNT]     = {};
     static const double GLOBAL_TOLERANCE = 2e-6f;
     static const double PIXEL_TOLERANCE  = 1e-3f;
 #endif
-    
+
 
 #ifdef _WIN32
     #define NOMINMAX
@@ -216,7 +216,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
 {
     const unsigned supportedImpls = rmgr::ssim::select_impl(impl);
     ASSERT_TRUE(supportedImpls & (1 << impl)) << "--- Unsupported instruction set ---"; // Fails if instruction set not supported or support not enabled at build time
-    
+
     typedef rmgr::ssim::uint8_t uint8_t;
 
     // Load images
