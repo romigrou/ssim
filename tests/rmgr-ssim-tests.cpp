@@ -51,7 +51,7 @@ static const char* g_imagesDir = g_defaultImagesDir;
 #if defined(__SIZEOF_FLOAT128__) && 0
     typedef __float128 RefFloat;
     #define REF_TOLERANCE  DBL_EPSILON
-#elif DBL_MANT_DIG < LDBL_MANT_DIG && LDBL_MANT_DIG <= 64 // long double OK if no more than 80 bits (otherwise likely to be software)
+#elif DBL_MANT_DIG < LDBL_MANT_DIG && LDBL_MANT_DIG <= 64 && !RMGR_ARCH_IS_X86_64 // long double OK if no more than 80 bits (otherwise likely to be software)
     typedef long double RefFloat;
     #define REF_TOLERANCE  DBL_EPSILON
 #else
