@@ -19,12 +19,12 @@ For the common use case, there's only one function you will need: `rmgr::ssim::c
 it takes quite a few parameters but that's the price to pay for flexibility and there's nothing really
 complicated about them.
 
-`compute_ssim()` can optionally compute the per-pixel SSIM map. I'm not sure whether it's really useful,
-but it sure is fun to look at and it only has a minor impact on performance (see below).
+`compute_ssim()` can optionally compute the per-pixel SSIM map (see below), which has a small impact on
+performance, but can come in handy.
 
-The default behaviour is to make no allocation and only use stack-based storage, which is fine if you have
-at least 400 KiB of stack space. If that's a lot for your stack to handle, you can have the function allocate
-buffers off the heap instead.
+The default behaviour is to make no allocation and only use stack-based storage, which is fine if you
+have at least 400 KiB of stack space. If that's a lot for your stack to handle, you can have the function
+allocate buffers off the heap instead.
 
 
 Speed

@@ -29,8 +29,7 @@
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
 RMGR_WARNING_PUSH()
-RMGR_WARNING_MSVC_DISABLE(4100) // unreferenced formal parameter
-RMGR_WARNING_MSVC_DISABLE(4244) // 'conversion' conversion from 'type1' to 'type2', possible loss of data
+RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
 #include "stb_image.h"
 RMGR_WARNING_POP()
 
@@ -253,7 +252,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
         RefSsim& expected = expectedSSIMs[channel];
         if (expected.map == NULL)
         {
-            // Compute reference SSIM using the naive implementation
+            // Compute reference per-pixel SSIM using the naive implementation
             expected.map = new RefFloat[imgWidth * imgHeight];
             ASSERT_NE(static_cast<RefFloat*>(NULL), expected.map);
             const RefFloat refSsim = rmgr::ssim::naive::compute_ssim<RefFloat>(imgWidth, imgHeight, refData+channel, refChannels, refStride, imgData+channel, imgChannels, imgStride, expected.map, 1, imgWidth);
