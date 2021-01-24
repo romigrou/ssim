@@ -404,11 +404,13 @@ typedef void (*ThreadFct)(void* arg, unsigned jobNum) RMGR_NOEXCEPT_TYPEDEF;
  * @param [in] threadCount How many concurrent threads can be used at the maximum.<br>
  *                         This value is non-zero and is &le; to the value passed to `compute_ssim()`.
  * @param [in] jobCount    How many times `fct` must be called in total.
+ * @param [in] context     The value passed in to `compute-ssim` as `threadPoolContext`.
+ *                         This is a user-defined value that can contain whatever.
  *
  * @retval 0     All went fine
  * @retval Other An error occurred
  */
-typedef int (*ThreadPoolFct)(ThreadFct fct, void* const args[], unsigned threadCount, unsigned jobCount) RMGR_NOEXCEPT_TYPEDEF;
+typedef int (*ThreadPoolFct)(void* context, ThreadFct fct, void* const args[], unsigned threadCount, unsigned jobCount) RMGR_NOEXCEPT_TYPEDEF;
 
 
 /**
@@ -422,27 +424,28 @@ typedef int (*ThreadPoolFct)(ThreadFct fct, void* const args[], unsigned threadC
  * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the `step` and `stride`
  *       parameters if this improves cache hit rates, as long as both images are traversed in the same order.
  *
- * @param [in]  width       The images' width,  in pixels
- * @param [in]  height      The images' height, in pixels
- * @param [in]  imgAData    A pointer to the considered channel of the top-left pixel of image A.
- * @param [in]  imgAStep    For image A, the distance (in bytes) between a pixel and the one immediately to its right.
- *                          This distance may be negative.
- * @param [in]  imgAStride  For image A, the distance (in bytes) between a pixel and the one immediately below it.
- *                          This distance may be negative.
- * @param [in]  imgBData    A pointer to the considered channel of the top-left pixel of image B.
- * @param [in]  imgBStep    For image B, the distance (in bytes) between a pixel and the one immediately to its right.
- *                          This distance may be negative.
- * @param [in]  imgBStride  For image B, the distance (in bytes) between a pixel and the one immediately below it.
- *                          This distance may be negative.
- * @param [out] ssimMap     A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need
- *                          the SSIM map, in which case the `ssimStep` and `ssimStride` parameters will be ignored.
- * @param [in]  ssimStep    The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately to its right.
- *                          This distance may be negative.
- * @param [in]  ssimStride  The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately below it.
- *                          This distance may be negative.
- * @param [in]  threadPool  A fuction that dispatches jobs on thread pool. If `NULL` the processing is done in mono-thread mode.
- * @param [in]  threadCount How many thread are present in the thread pool. Ignored if `threadPool` is `NULL`.
- * @param [in]  flags       A set of optional flags to tweak the behaviour of the function
+ * @param [in]  width             The images' width,  in pixels
+ * @param [in]  height            The images' height, in pixels
+ * @param [in]  imgAData          A pointer to the considered channel of the top-left pixel of image A.
+ * @param [in]  imgAStep          For image A, the distance (in bytes) between a pixel and the one immediately to its right.
+ *                                This distance may be negative.
+ * @param [in]  imgAStride        For image A, the distance (in bytes) between a pixel and the one immediately below it.
+ *                                This distance may be negative.
+ * @param [in]  imgBData          A pointer to the considered channel of the top-left pixel of image B.
+ * @param [in]  imgBStep          For image B, the distance (in bytes) between a pixel and the one immediately to its right.
+ *                                This distance may be negative.
+ * @param [in]  imgBStride        For image B, the distance (in bytes) between a pixel and the one immediately below it.
+ *                                This distance may be negative.
+ * @param [out] ssimMap           A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need
+ *                                the SSIM map, in which case the `ssimStep` and `ssimStride` parameters will be ignored.
+ * @param [in]  ssimStep          The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately to its right.
+ *                                This distance may be negative.
+ * @param [in]  ssimStride        The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately below it.
+ *                                This distance may be negative.
+ * @param [in]  threadPool        A function that dispatches jobs on a thread pool. If `NULL` the processing is done in mono-thread mode.
+ * @param [in]  threadPoolContext A user-defined value that will be passed as-is to the thread pool. Ignored if `threadPool` is `NULL`.
+ * @param [in]  threadCount       How many threads are present in the thread pool. Ignored if `threadPool` is `NULL`.
+ * @param [in]  flags             A set of optional flags to tweak the behaviour of the function
  *
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
@@ -451,7 +454,7 @@ float compute_ssim(uint32_t width, uint32_t height,
                    const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
                    const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
                    float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride,
-                   ThreadPoolFct threadPool, unsigned threadCount, unsigned flags=0) RMGR_NOEXCEPT;
+                   ThreadPoolFct threadPool, void* threadPoolContext, unsigned threadCount, unsigned flags=0) RMGR_NOEXCEPT;
 
 
 /**
@@ -493,7 +496,7 @@ inline float compute_ssim(uint32_t width, uint32_t height,
                           const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
                           float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags=0) RMGR_NOEXCEPT
 {
-    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, ssimMap, ssimStep, ssimStride, NULL, 0, flags);
+    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, ssimMap, ssimStep, ssimStride, NULL, NULL, 0, flags);
 }
 
 

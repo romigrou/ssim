@@ -886,7 +886,7 @@ float compute_ssim(uint32_t width, uint32_t height,
                    const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
                    const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
                    float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride,
-                   ThreadPoolFct threadPool, unsigned threadCount, unsigned flags) RMGR_NOEXCEPT
+                   ThreadPoolFct threadPool, void* threadPoolContext, unsigned threadCount, unsigned flags) RMGR_NOEXCEPT
 {
     MultiplyFct     multiplyFct     = g_multiplyFct;
     GaussianBlurFct gaussianBlurFct = g_gaussianBlurFct;
@@ -1007,7 +1007,7 @@ float compute_ssim(uint32_t width, uint32_t height,
                 for (int i=0; i<6; ++i)
                     threadParams[threadNum].tileParams.buffers[i] = heapBuffer + (6*threadNum + i) * BUFFER_CAPACITY;
             }
-            threadPoolResult = threadPool(process_tile_in_thread, threadArgs, actualThreadCount, tileCount);
+            threadPoolResult = threadPool(threadPoolContext, process_tile_in_thread, threadArgs, actualThreadCount, tileCount);
         }
         else
         {
@@ -1027,7 +1027,7 @@ float compute_ssim(uint32_t width, uint32_t height,
     else
     {
         if (threadPool != NULL)
-            threadPoolResult = threadPool(process_tile_on_stack_in_thread, threadArgs, actualThreadCount, tileCount);
+            threadPoolResult = threadPool(threadPoolContext, process_tile_on_stack_in_thread, threadArgs, actualThreadCount, tileCount);
         else
         {
             for (uint32_t tileY=0; tileY<height; tileY+=TILE_MAX_HEIGHT)
