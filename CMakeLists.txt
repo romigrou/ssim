@@ -219,7 +219,7 @@ endif()
 # Sample
 
 if (RMGR_SSIM_BUILD_CLI)
-    add_executable(rmgr-ssim-sample "sample/sample.cpp")
+    add_executable(rmgr-ssim-sample "sample/rmgr-ssim-sample.cpp")
     if (RMGR_SSIM_USE_OPENMP)
         target_link_libraries(rmgr-ssim-sample PRIVATE rmgr-ssim-openmp)
     else()

@@ -84,7 +84,7 @@ But be aware that this will basically make the library run half as fast.
 The following table gives the maximum errors of global and per-pixel SSIMs depending on whether the library
 was built with single or double internal precision. Those errors are relative to a fully quad-precision (128-bit)
 reference implementation. As you can see, the double precision is almost as precise as the `float` API allows;
-The single precision version should nonetheless precise enough for most applications.
+The single precision version should nonetheless be precise enough for most applications.
 
 |                  | Average<br>Global Error | Maximum<br>Global Error | Average<br>Per-Pixel Error | Maximum<br>Per-Pixel Error |
 |:-----------------|:-----------------------:|:-----------------------:|:--------------------------:|:--------------------------:|
@@ -109,7 +109,6 @@ Bit Depth Support
 Only 8-bit images are supported. However, it shouldn't be complicated to modify the code to support
 other bit depths: all that needs to be changed are the `L` constant and the `retrieve_tile()` function.
 
-
 Building
 --------
 
@@ -121,6 +120,18 @@ rather than `float` by setting the `RMGR_SSIM_USE_DOUBLE` option to `ON`.
 
 Otherwise, the code is mostly self-configurable and should therefore be easy to port to another build system.
 
+Command Line Tool
+-----------------
+
+A simple command line tool that computes the SSIM of two images is available. To build it, set the CMake variable
+`RMGR_SSIM_BUILD_CLI` to `ON`.
+
+Sample Code
+-----------
+
+<code>[sample/rmgr-ssim-sample.cpp](sample/rmgr-ssim-sample.cpp)</code> is a simplified version of the aforementioned
+command line tool that showcases how to call `rmgr::ssim::compute_ssim()` in the most straightforward manner.
+For sample code of more advanced uses, please refer to [the unit tests](tests/rmgr-ssim-tests.cpp).
 
 Documentation
 -------------
@@ -134,7 +145,7 @@ Licensing
 
 This library is licensed under the zlib license, as follows:
 
-> Copyright © 2020, Romain Bailly
+> Copyright © 2021, Romain Bailly
 >
 > This software is provided 'as-is', without any express or implied
 > warranty.  In no event will the authors be held liable for any damages
