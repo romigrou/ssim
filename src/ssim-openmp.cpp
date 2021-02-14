@@ -27,7 +27,7 @@ namespace rmgr { namespace ssim
 {
 
 
-static int run_in_openmp(void* /*context*/, ThreadFct fct, void* const args[], unsigned threadCount, unsigned jobCount)
+static int run_in_openmp(void* /*context*/, ThreadFct fct, void* const args[], unsigned threadCount, unsigned jobCount) RMGR_NOEXCEPT
 {
     #pragma omp parallel for num_threads(threadCount)
     for (int jobNum=0; jobNum < int(jobCount); ++jobNum)

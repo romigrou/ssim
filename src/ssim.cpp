@@ -860,7 +860,7 @@ struct ThreadParams
 };
 
 
-static void process_tile_in_thread(void* arg, unsigned tileNum)
+static void process_tile_in_thread(void* arg, unsigned tileNum) RMGR_NOEXCEPT
 {
     ThreadParams& p = *static_cast<ThreadParams*>(arg);
     p.tileParams.tileX = (tileNum % p.tileHorzCount) * p.globalParams->tileMaxWidth;
@@ -869,7 +869,7 @@ static void process_tile_in_thread(void* arg, unsigned tileNum)
 }
 
 
-static void process_tile_on_stack_in_thread(void* arg, unsigned tileNum)
+static void process_tile_on_stack_in_thread(void* arg, unsigned tileNum) RMGR_NOEXCEPT
 {
     ThreadParams& p = *static_cast<ThreadParams*>(arg);
     unsigned tileX = (tileNum % p.tileHorzCount) * p.globalParams->tileMaxWidth;
