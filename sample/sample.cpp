@@ -1,0 +1,98 @@
+/*
+ * Copyright (c) 2021, Romain Bailly
+ *
+ * This software is provided 'as-is', without any express or implied
+ * warranty. In no event will the authors be held liable for any damages
+ * arising from the use of this software.
+ *
+ * Permission is granted to anyone to use this software for any purpose,
+ * including commercial applications, and to alter it and redistribute it
+ * freely, subject to the following restrictions:
+ *
+ * 1. The origin of this software must not be misrepresented; you must not
+ *    claim that you wrote the original software. If you use this software
+ *    in a product, an acknowledgment in the product documentation would be
+ *    appreciated but is not required.
+ * 2. Altered source versions must be plainly marked as such, and must not be
+ *    misrepresented as being the original software.
+ * 3. This notice may not be removed or altered from any source distribution.
+ */
+
+#define USE_OPENMP  1 // Set to 1 to use the OpenMP implementation
+
+#include <rmgr/ssim.h>
+#if USE_OPENMP
+    #include <rmgr/ssim-openmp.h>
+#endif
+
+#include <cstddef>
+#include <cstdio>
+#include <cstring>
+
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_FAILURE_USERMSG
+#include "stb_image.h"
+
+
+extern "C" int main(int argc, char* argv[])
+{
+    if (argc != 3)
+    {
+        fprintf(stderr, "Usage: rmgr-ssim-sample file1 file2\n\n");
+        return EXIT_FAILURE;
+    }
+
+    const char* img1Path = argv[1];
+    const char* img2Path = argv[2];
+
+    // Load 1st image
+    int img1Width, img1Height, img1ChannelCount;
+    stbi_uc* img1 = stbi_load(img1Path, &img1Width, &img1Height, &img1ChannelCount, 0);
+    if (img1 == NULL)
+    {
+        fprintf(stderr, "Failed to load image \"%s\": %s\n", img1Path, stbi_failure_reason());
+        return EXIT_FAILURE;
+    }
+
+    // Load 2nd image
+    int img2Width, img2Height, img2ChannelCount;
+    stbi_uc* img2 = stbi_load(img2Path, &img2Width, &img2Height, &img2ChannelCount, 0);
+    if (img2 == NULL)
+    {
+        fprintf(stderr, "Failed to load image \"%s\": %s\n", img2Path, stbi_failure_reason());
+        return EXIT_FAILURE;
+    }
+
+    // Check images have the same features
+    if (img1Width != img2Width || img1Height != img2Height || img1ChannelCount != img2ChannelCount)
+    {
+        fprintf(stderr, "Images must have the same dimensions and number of channels\n");
+        return EXIT_FAILURE;
+    }
+
+    // Compute SSIM of each channel
+    const int stride = img1Width * img1ChannelCount;
+    for (int channelNum=0; channelNum < img1ChannelCount; ++channelNum)
+    {
+#if USE_OPENMP
+        const float ssim = rmgr::ssim::compute_ssim_openmp(img1Width, img1Height,
+                                                           img1+channelNum, img1ChannelCount, stride,
+                                                           img2+channelNum, img1ChannelCount, stride);
+#else
+        const float ssim = rmgr::ssim::compute_ssim(img1Width, img1Height,
+                                                    img1+channelNum, img1ChannelCount, stride,
+                                                    img2+channelNum, img1ChannelCount, stride);
+#endif
+        if (rmgr::ssim::get_errno(ssim) != 0)
+            fprintf(stderr, "Failed to compute SSIM of channel %d\n", channelNum+1);
+        else
+            printf("SSIM of channel %d:% 7.4f\n", channelNum+1, ssim);
+    }
+
+    // Clean up
+    stbi_image_free(img2);
+    stbi_image_free(img1);
+
+    return EXIT_SUCCESS;
+}

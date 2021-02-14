@@ -75,7 +75,6 @@ namespace rmgr { namespace ssim { namespace avx
 
 static void multiply(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT
 {
-
     a       -= margin * stride + margin;
     b       -= margin * stride + margin;
     product -= margin * stride + margin;

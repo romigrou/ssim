@@ -29,9 +29,11 @@ include(GNUInstallDirs)
 ###################################################################################################
 # Options
 
-option(RMGR_SSIM_USE_DOUBLE  "Whether to use double instead of float for increased precision (but slower)" OFF)
-option(RMGR_SSIM_USE_OPENMP  "Whether to use OpenMP for multi-threaded processing"                         OFF)
-option(RMGR_SSIM_BUILD_TESTS "Whether to build rmgr::ssim's unit tests"                                    OFF)
+option(RMGR_SSIM_USE_DOUBLE   "Whether to use double instead of float for increased precision (but slower)" OFF)
+option(RMGR_SSIM_USE_OPENMP   "Whether to use OpenMP for multi-threaded processing"                         OFF)
+option(RMGR_SSIM_BUILD_CLI    "Whether to build the command line interface"                                 OFF)
+option(RMGR_SSIM_BUILD_SAMPLE "Whether to build the sample program "                                        OFF)
+option(RMGR_SSIM_BUILD_TESTS  "Whether to build rmgr::ssim's unit tests"                                    OFF)
 
 set(RMGR_SSIM_COMPILE_OPTIONS)
 set(RMGR_SSIM_DEFINITIONS)
@@ -166,6 +168,68 @@ if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
         PUBLIC  rmgr-ssim
         PRIVATE OpenMP::OpenMP_CXX
     )
+endif()
+
+
+###############################################################################
+# stb_image
+
+if (RMGR_SSIM_BUILD_CLI OR RMGR_SSIM_BUILD_TESTS OR RMGR_SSIM_BUILD_SAMPLE)
+    set(STB_HASH   "b42009b3b9d4ca35bc703f5310eedc74f584be58")
+    set(STBI_URL   "https://raw.githubusercontent.com/nothings/stb/${STB_HASH}/stb_image.h")
+    set(STBIW_URL  "https://raw.githubusercontent.com/nothings/stb/${STB_HASH}/stb_image_write.h")
+    set(STBI_PATH  "${CMAKE_CURRENT_SOURCE_DIR}/src/stb_image.h")
+    set(STBIW_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src/stb_image_write.h")
+    foreach (prefix STBI STBIW)
+        if (NOT EXISTS "${${prefix}_PATH}")
+            file(DOWNLOAD "${${prefix}_URL}" "${${prefix}_PATH}" STATUS ${prefix}_STATUS)
+            list(GET ${prefix}_STATUS 0 ${prefix}_STATUS_VALUE)
+            if (NOT ${prefix}_STATUS_VALUE EQUAL 0)
+                list(GET ${prefix}_STATUS 1 ${prefix}_STATUS_MSG)
+                message(FATAL_ERROR "Failed to download ${${prefix}_URL}: ${${prefix}_STATUS_MSG}")
+                if (EXISTS "${${prefix}_PATH}")
+                    file(REMOVE "${${prefix}_PATH}")
+                endif()
+            endif()
+        endif()
+    endforeach()
+endif()
+
+
+###################################################################################################
+# Command line interface
+
+if (RMGR_SSIM_BUILD_CLI)
+    add_executable(rmgr-ssim-cli "src/ssim-cli.cpp")
+    if (RMGR_SSIM_USE_OPENMP)
+        target_link_libraries(rmgr-ssim-cli PRIVATE rmgr-ssim-openmp)
+    else()
+        target_link_libraries(rmgr-ssim-cli PRIVATE rmgr-ssim)
+    endif()
+    target_compile_options(rmgr-ssim-cli PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
+    target_compile_definitions(rmgr-ssim-cli PRIVATE ${RMGR_SSIM_DEFINITIONS})
+    set_target_properties(rmgr-ssim-cli PROPERTIES OUTPUT_NAME "rmgr-ssim")
+    if (WIN32)
+        target_compile_definitions(rmgr-ssim-cli PRIVATE "_UNICODE" "_CRT_SECURE_NO_WARNINGS")
+    endif()
+endif()
+
+
+###################################################################################################
+# Sample
+
+if (RMGR_SSIM_BUILD_CLI)
+    add_executable(rmgr-ssim-sample "sample/sample.cpp")
+    if (RMGR_SSIM_USE_OPENMP)
+        target_link_libraries(rmgr-ssim-sample PRIVATE rmgr-ssim-openmp)
+    else()
+        target_link_libraries(rmgr-ssim-sample PRIVATE rmgr-ssim)
+    endif()
+    target_compile_options(rmgr-ssim-sample PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
+    target_include_directories(rmgr-ssim-sample PRIVATE "src")
+    if (WIN32)
+        target_compile_definitions(rmgr-ssim-cli PRIVATE "_CRT_SECURE_NO_WARNINGS")
+    endif()
 endif()
 
 

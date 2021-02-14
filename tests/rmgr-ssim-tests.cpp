@@ -30,7 +30,7 @@
 #define STBI_ONLY_PNG
 RMGR_WARNING_PUSH()
 RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
-#include "stb_image.h"
+#include "../src/stb_image.h"
 RMGR_WARNING_POP()
 
 #if RMGR_COMPILER_IS_MSVC

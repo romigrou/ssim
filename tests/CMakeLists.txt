@@ -88,25 +88,6 @@ endif()
 
 
 ###############################################################################
-# stb_image
-
-set(STBI_HASH "e140649ccf40818781b7e408f6228a486f6d254b")
-set(STBI_URL  "https://raw.githubusercontent.com/nothings/stb/${STBI_HASH}/stb_image.h")
-set(STBI_PATH "${CMAKE_CURRENT_SOURCE_DIR}/stb_image.h")
-if (NOT EXISTS "${STBI_PATH}")
-    file(DOWNLOAD "${STBI_URL}" "${STBI_PATH}" STATUS STBI_STATUS)
-    list(GET STBI_STATUS 0 STBI_STATUS_VALUE)
-    if (NOT STBI_STATUS_VALUE EQUAL 0)
-        list(GET STBI_STATUS 1 STBI_STATUS_MSG)
-        message(FATAL_ERROR "Failed to download stb_image.h: ${STBI_STATUS_MSG}")
-        if (EXISTS "${STBI_PATH}")
-            file(REMOVE "${STBI_PATH}")
-        endif()
-    endif()
-endif()
-
-
-###############################################################################
 # Main Target
 
 get_filename_component(RMGR_SSIM_TESTS_IMAGES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/images" ABSOLUTE)
@@ -114,7 +95,7 @@ get_filename_component(RMGR_SSIM_TESTS_IMAGES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/i
 set(RMGR_SSIM_TESTS_FILES
     "rmgr-ssim-tests.cpp"
     "ssim_naive.h"
-    "stb_image.h"
+    "../src/stb_image.h"
 )
 
 source_group("Source Files" FILES ${RMGR_SSIM_TESTS_FILES})
