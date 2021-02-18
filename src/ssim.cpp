@@ -539,7 +539,7 @@ static double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStr
                        const Float* muATile, const Float* muBTile, const Float* sigmaA2Tile, const Float* sigmaB2Tile, const Float* sigmaABTile,
                        float* ssimTile, ptrdiff_t ssimStep, ptrdiff_t ssimStride) RMGR_NOEXCEPT
 {
-    double tileSum = 0.0f; // The sum is always done on a double to increase precision
+    double tileSum = 0.0; // The sum is always done on a double to increase precision
 
     for (uint32_t y=0; y<tileHeight; ++y)
     {

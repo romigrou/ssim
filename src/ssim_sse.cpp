@@ -342,7 +342,7 @@ static double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStr
     const Vector vc1  = VSET1( c1);
     const Vector vnc2 = VSET1(-c2); // Because we compute -sigma instead of sigma (but the numerator and denominator signs cancel out)
 
-    double tileSum = 0.0f; // The sum is always done on a double to increase precision
+    double tileSum = 0.0; // The sum is always done on a double to increase precision
 
     for (uint32_t y=0; y<tileHeight; ++y)
     {
