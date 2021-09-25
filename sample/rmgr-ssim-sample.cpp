@@ -72,17 +72,18 @@ extern "C" int main(int argc, char* argv[])
     }
 
     // Compute SSIM of each channel
+    rmgr::ssim::Params params = {};
+    params.width  = img1Width;
+    params.height = img1Height;
     const int stride = img1Width * img1ChannelCount;
     for (int channelNum=0; channelNum < img1ChannelCount; ++channelNum)
     {
+        params.imgA.init_interleaved(img1, img1Width*img1ChannelCount, channelNum, img1ChannelCount);
+        params.imgB.init_interleaved(img2, img2Width*img2ChannelCount, channelNum, img2ChannelCount);
 #if USE_OPENMP
-        const float ssim = rmgr::ssim::compute_ssim_openmp(img1Width, img1Height,
-                                                           img1+channelNum, img1ChannelCount, stride,
-                                                           img2+channelNum, img1ChannelCount, stride);
+        const float ssim = rmgr::ssim::compute_ssim_openmp(params);
 #else
-        const float ssim = rmgr::ssim::compute_ssim(img1Width, img1Height,
-                                                    img1+channelNum, img1ChannelCount, stride,
-                                                    img2+channelNum, img1ChannelCount, stride);
+        const float ssim = rmgr::ssim::compute_ssim(params);
 #endif
         if (rmgr::ssim::get_errno(ssim) != 0)
             fprintf(stderr, "Failed to compute SSIM of channel %d\n", channelNum+1);

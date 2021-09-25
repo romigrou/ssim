@@ -96,14 +96,18 @@ static float compute_ssim(const stbi_uc* img1, const stbi_uc* img2, int width, i
     assert(imgChannel < imgChannelCount);
     assert(map == NULL || mapChannel < mapChannelCount);
     assert(map != NULL || mapChannel == 0);
+    rmgr::ssim::Params params = {};
+    params.width      = width;
+    params.height     = height;
+    params.imgA.init_interleaved(img1, width*imgChannelCount, imgChannelCount, imgChannel);
+    params.imgB.init_interleaved(img2, width*imgChannelCount, imgChannelCount, imgChannel);
+    params.ssimMap    = map + mapChannel;
+    params.ssimStep   = mapChannelCount;
+    params.ssimStride = width * mapChannelCount;
 #if RMGR_SSIM_USE_OPENMP
-    return rmgr::ssim::compute_ssim_openmp(width, height, img1+imgChannel, imgChannelCount, width*imgChannelCount,
-                                                          img2+imgChannel, imgChannelCount, width*imgChannelCount,
-                                                          map+mapChannel,  mapChannelCount, width*mapChannelCount);
+    return rmgr::ssim::compute_ssim_openmp(params);
 #else
-    return rmgr::ssim::compute_ssim(width, height, img1+imgChannel, imgChannelCount, width*imgChannelCount,
-                                                   img2+imgChannel, imgChannelCount, width*imgChannelCount,
-                                                   map+mapChannel,  mapChannelCount, width*mapChannelCount);
+    return rmgr::ssim::compute_ssim(params);
 #endif
 }
 

@@ -22,6 +22,7 @@
 #define RMGR_SSIM_H
 
 
+#include <cassert>
 #include <cstddef>
 
 
@@ -371,22 +372,6 @@ typedef void  (*DeallocFct)(void* address) RMGR_NOEXCEPT_TYPEDEF;
 
 
 /**
- * @brief Sets the allocator functions
- *
- * @warning If you call this function, you must call it prior to calling any other function from `rmgr::ssim`.
- *
- * @param [in] alloc   The allocating function. `NULL` is a valid value and means to restore
- *                     the default allocating function, in which case `dealloc` must be `NULL` as well.
- * @param [in] dealloc The deallocating function. `NULL` is a valid value and means to restore
- *                     the default deallocating function, in which case `alloc` must be `NULL` as well.
- */
-int set_allocator(AllocFct alloc, DeallocFct dealloc) RMGR_NOEXCEPT;
-
-
-const unsigned FLAG_HEAP_BUFFERS = 1; ///< Specify this flag to allocate work buffers on the heap rather than on the stack
-
-
-/**
  * @brief Prototype for the function to be called from inside a thread pool
  *
  * @param [in] arg    The per-thread argument as passed to the thread pool
@@ -414,126 +399,107 @@ typedef int (*ThreadPoolFct)(void* context, ThreadFct fct, void* const args[], u
 
 
 /**
+ * @brief Set of parameters relative to an input image
+ *
+ * This structure can handle almost any kind of image storage scheme (interleaved or planar, top-down or
+ * bottom-up, row-major or column-major, ...). All you need is to specify the `step` and `stride` parameters
+ * such that the address of a pixel's channel is given by `topLeft + x * imgStep + y * imgStride` with `x` and
+ * `y` being the horizontal and vertical coordinates, respectively.
+ *
+ * Convenience functions to initialize the parameters for the two most common schemes are provided,
+ * but you can (and should) bypass them if you need more flexibility.
+ */
+struct ImgParams
+{
+    const uint8_t* topLeft; ///< Pointer to the considered channel of the image's top-left pixel
+    ptrdiff_t      step;    ///< The distance (in bytes) between a pixel and the one immediately to its right
+    ptrdiff_t      stride;  ///< The distance (in bytes) between a pixel and the one immediately below it
+
+    /**
+     * @brief Sets the parameters for an interleaved image
+     *
+     * @param [in] data         Pointer to the image's top-left pixel
+     * @param [in] imgStride    The distance (in bytes) between a pixel and the one immediately below it.
+     *                          This is negative for bottom-up images.
+     * @param [in] channelNum   The channel's whose SSIM is to be computed
+     * @param [in] channelCount How many channels the image contains
+     */
+    void init_interleaved(const uint8_t* data, ptrdiff_t imgStride, unsigned channelCount, unsigned channelNum) RMGR_NOEXCEPT
+    {
+        assert(data != NULL);
+        topLeft = data + channelNum;
+        step    = channelCount;
+        stride  = imgStride;
+    }
+
+    /**
+     * @brief Sets the parameters for an interleaved image (assuming one channel per plane)
+     *
+     * @param [in] planes   For each plane, a pointer to its top-left pixel
+     * @param [in] strides  For each plane, the distance (in bytes) between a pixel and the one immediately below it.
+     *                      This is negative for bottom-up images.
+     * @param [in] planeNum The channel's whose SSIM is to be computed
+     */
+    void init_planar(uint8_t const* const planes[], const ptrdiff_t strides[], unsigned planeNum) RMGR_NOEXCEPT
+    {
+        assert(planes != NULL && planes[planeNum] != NULL);
+        assert(strides != NULL);
+        topLeft = planes[planeNum];
+        step    = 1;
+        stride  = strides[planeNum];
+    }
+};
+
+
+/**
+ * @brief Set of parameters, except those related to threading
+ */
+struct UnthreadedParams
+{
+    // Input
+    uint32_t       width;      ///< The images' width,  in pixels
+    uint32_t       height;     ///< The images' height, in pixels
+    ImgParams      imgA;       ///< The first  image's parameters
+    ImgParams      imgB;       ///< The second image's parameters
+
+    // SSIM map
+    float*         ssimMap;    ///< A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need a map
+    ptrdiff_t      ssimStep;   ///< The distance (in number of `float`) between a pixel and the one immediately to its right
+    ptrdiff_t      ssimStride; ///< The distance (in number of `float`) between a pixel and the one immediately below it (negative for bottom-up)
+
+    // Allocation
+    AllocFct       alloc;      ///< The allocation function. If `NULL`, stack storage is used.
+    DeallocFct     dealloc;    ///< The deallocation function. Ignored if `alloc` is ``NULL .
+
+    /**
+     * @brief Sets the allocation functions to use `malloc()` and `free()`
+     */
+    void use_default_allocator() RMGR_NOEXCEPT;
+};
+
+
+/**
+ * @brief Full set of parameters
+ */
+struct Params: public UnthreadedParams
+{
+    ThreadPoolFct  threadPool;        ///< A function that dispatches jobs on a thread pool. If `NULL` the processing is done in mono-thread mode.
+    void*          threadPoolContext; ///< A user-defined value that will be passed as-is to the thread pool. Ignored if `threadPool` is `NULL`.
+    unsigned       threadCount;       ///< How many threads are present in the thread pool. Ignored if `threadPool` is `NULL`.
+};
+
+
+/**
  * @brief Computes the SSIM of a single channel of two images and, optionally, the per-pixel SSIM map
  *
- * This function can handle almost any kind of image storage scheme (interleaved or planar, top-down or
- * bottom-up, row-major or column-major, ...). All you need is to specify the `step` and `stride` parameters
- * such that the address of a pixel's channel is given by `imgData + x * imgStep + y * imgStride` with `x` and
- * `y` being the horizontal and vertical coordinates, respectively.
- *
- * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the `step` and `stride`
- *       parameters if this improves cache hit rates, as long as both images are traversed in the same order.
- *
- * @param [in]  width             The images' width,  in pixels
- * @param [in]  height            The images' height, in pixels
- * @param [in]  imgAData          A pointer to the considered channel of the top-left pixel of image A.
- * @param [in]  imgAStep          For image A, the distance (in bytes) between a pixel and the one immediately to its right.
- *                                This distance may be negative.
- * @param [in]  imgAStride        For image A, the distance (in bytes) between a pixel and the one immediately below it.
- *                                This distance may be negative.
- * @param [in]  imgBData          A pointer to the considered channel of the top-left pixel of image B.
- * @param [in]  imgBStep          For image B, the distance (in bytes) between a pixel and the one immediately to its right.
- *                                This distance may be negative.
- * @param [in]  imgBStride        For image B, the distance (in bytes) between a pixel and the one immediately below it.
- *                                This distance may be negative.
- * @param [out] ssimMap           A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need
- *                                the SSIM map, in which case the `ssimStep` and `ssimStride` parameters will be ignored.
- * @param [in]  ssimStep          The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately to its right.
- *                                This distance may be negative.
- * @param [in]  ssimStride        The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately below it.
- *                                This distance may be negative.
- * @param [in]  threadPool        A function that dispatches jobs on a thread pool. If `NULL` the processing is done in mono-thread mode.
- * @param [in]  threadPoolContext A user-defined value that will be passed as-is to the thread pool. Ignored if `threadPool` is `NULL`.
- * @param [in]  threadCount       How many threads are present in the thread pool. Ignored if `threadPool` is `NULL`.
- * @param [in]  flags             A set of optional flags to tweak the behaviour of the function
+ * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the
+ *       `step` and `stride` (as well as the `width` and `height`) parameters if this improves cache
+ *       hit rates. As long as both images are traversed in the same order.
  *
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
  */
-float compute_ssim(uint32_t width, uint32_t height,
-                   const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                   const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride,
-                   ThreadPoolFct threadPool, void* threadPoolContext, unsigned threadCount, unsigned flags=0) RMGR_NOEXCEPT;
-
-
-/**
- * @brief Computes in mono-thread the SSIM of a single channel of two images and, optionally, the per-pixel SSIM map
- *
- * This function can handle almost any kind of image storage scheme (interleaved or planar, top-down or
- * bottom-up, row-major or column-major, ...). All you need is to specify the `step` and `stride` parameters
- * such that the address of a pixel's channel is given by `imgData + x * imgStep + y * imgStride` with `x` and
- * `y` being the horizontal and vertical coordinates, respectively.
- *
- * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the `step` and `stride`
- *       parameters if this improves cache hit rates, as long as both images are traversed in the same order.
- *
- * @param [in]  width      The images' width,  in pixels
- * @param [in]  height     The images' height, in pixels
- * @param [in]  imgAData   A pointer to the considered channel of the top-left pixel of image A.
- * @param [in]  imgAStep   For image A, the distance (in bytes) between a pixel and the one immediately to its right.
- *                         This distance may be negative.
- * @param [in]  imgAStride For image A, the distance (in bytes) between a pixel and the one immediately below it.
- *                         This distance may be negative.
- * @param [in]  imgBData   A pointer to the considered channel of the top-left pixel of image B.
- * @param [in]  imgBStep   For image B, the distance (in bytes) between a pixel and the one immediately to its right.
- *                         This distance may be negative.
- * @param [in]  imgBStride For image B, the distance (in bytes) between a pixel and the one immediately below it.
- *                         This distance may be negative.
- * @param [out] ssimMap    A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need
- *                         the SSIM map, in which case the `ssimStep` and `ssimStride` parameters will be ignored.
- * @param [in]  ssimStep   The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately to its right.
- *                         This distance may be negative.
- * @param [in]  ssimStride The distance (in `float`s) between a pixel's SSIM and that of the pixel immediately below it.
- *                         This distance may be negative.
- * @param [in]  flags      A set of optional flags to tweak the behaviour of the function
- *
- * @retval >=0 The image's SSIM, in the range [0;1].
- * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
- */
-inline float compute_ssim(uint32_t width, uint32_t height,
-                          const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                          const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                          float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags=0) RMGR_NOEXCEPT
-{
-    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, ssimMap, ssimStep, ssimStride, NULL, NULL, 0, flags);
-}
-
-
-/**
- * @brief Computes in mono-thread the SSIM of a single channel of two images
- *
- * This function can handle almost any kind of image storage scheme (interleaved or planar, top-down or
- * bottom-up, row-major or column-major, ...). All you need is to specify the `step` and `stride` parameters
- * such that the address of a pixel's channel is given by `imgData + x * imgStep + y * imgStride` with `x` and
- * `y` being the horizontal and vertical coordinates, respectively.
- *
- * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the `step` and `stride`
- *       parameters if this improves cache hit rates, as long as both images are traversed in the same order.
- *
- * @param [in] width      The images' width,  in pixels
- * @param [in] height     The images' height, in pixels
- * @param [in] imgAData   A pointer to the considered channel of the top-left pixel of image A.
- * @param [in] imgAStep   For image A, the distance (in bytes) between a pixel and the one immediately to its right.
- *                        This distance may be negative.
- * @param [in] imgAStride For image A, the distance (in bytes) between a pixel and the one immediately below it.
- *                        This distance may be negative.
- * @param [in] imgBData   A pointer to the considered channel of the top-left pixel of image B.
- * @param [in] imgBStep   For image B, the distance (in bytes) between a pixel and the one immediately to its right.
- *                        This distance may be negative.
- * @param [in] imgBStride For image B, the distance (in bytes) between a pixel and the one immediately below it.
- *                        This distance may be negative.
- * @param [in] flags      A set of optional flags to tweak the behaviour of the function
- *
- * @retval >=0 The image's SSIM, in the range [0;1].
- * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
- */
-inline float compute_ssim(uint32_t width, uint32_t height,
-                          const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                          const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride, unsigned flags=0) RMGR_NOEXCEPT
-{
-    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, NULL, 0, 0, flags);
-}
+float compute_ssim(const Params& params) RMGR_NOEXCEPT;
 
 
 /**

@@ -40,13 +40,14 @@ static int run_in_openmp(void* /*context*/, ThreadFct fct, void* const args[], u
 }
 
 
-float compute_ssim_openmp(uint32_t width, uint32_t height,
-                       const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                       const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                       float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride, unsigned flags) RMGR_NOEXCEPT
+float compute_ssim_openmp(const UnthreadedParams& params) RMGR_NOEXCEPT
 {
-    const unsigned threadCount = omp_get_num_procs();
-    return compute_ssim(width, height, imgAData, imgAStep, imgAStride, imgBData, imgBStep, imgBStride, ssimMap, ssimStep, ssimStride, run_in_openmp, NULL, threadCount, flags);
+    Params fullParams;
+    static_cast<UnthreadedParams&>(fullParams) = params;
+    fullParams.threadPool        = run_in_openmp;
+    fullParams.threadCount       = omp_get_num_procs();
+    fullParams.threadPoolContext = NULL;
+    return compute_ssim(fullParams);
 }
 
 

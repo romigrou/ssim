@@ -21,7 +21,6 @@
 #include <rmgr/ssim.h>
 #include "ssim_internal.h"
 #include <algorithm>
-#include <cassert>
 #include <cerrno>
 #include <climits>
 #include <cmath>
@@ -169,21 +168,10 @@ static const size_t   BUFFER_CAPACITY  = ALIGN_UP(BUFFER_STRIDE * BUFFER_HEIGHT 
 // Allocators
 
 
-static AllocFct   g_alloc   = default_alloc;
-static DeallocFct g_dealloc = default_dealloc;
-
-static inline void* alloc(size_t size, size_t alignment=0) RMGR_NOEXCEPT
+void UnthreadedParams::use_default_allocator() RMGR_NOEXCEPT
 {
-    assert(g_alloc != NULL);
-    assert((alignment & (alignment-1)) == 0); // 0 or a power of 2
-    const size_t minAlignment = sizeof(void*);
-    return g_alloc(size, (alignment>=minAlignment)?alignment:minAlignment);
-}
-
-static inline void dealloc(void* address) RMGR_NOEXCEPT
-{
-    assert(g_dealloc != NULL);
-    return g_dealloc(address);
+    alloc   = default_alloc;
+    dealloc = default_dealloc;
 }
 
 
@@ -661,12 +649,8 @@ struct GlobalParams
     // User-specified parameters
     uint32_t        width;
     uint32_t        height;
-    const uint8_t*  imgAData;
-    ptrdiff_t       imgAStep;
-    ptrdiff_t       imgAStride;
-    const uint8_t*  imgBData;
-    ptrdiff_t       imgBStep;
-    ptrdiff_t       imgBStride;
+    ImgParams       imgA;
+    ImgParams       imgB;
     float*          ssimMap;
     ptrdiff_t       ssimStep;
     ptrdiff_t       ssimStride;
@@ -709,8 +693,8 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
 
     Float* a = tp.buffers[1] + offsetToTopLeft;
     Float* b = tp.buffers[2] + offsetToTopLeft;
-    retrieve_tile(a, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgAData, gp.width, gp.height, gp.imgAStep, gp.imgAStride);
-    retrieve_tile(b, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgBData, gp.width, gp.height, gp.imgBStep, gp.imgBStride);
+    retrieve_tile(a, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgA.topLeft, gp.width, gp.height, gp.imgA.step, gp.imgA.stride);
+    retrieve_tile(b, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgB.topLeft, gp.width, gp.height, gp.imgB.step, gp.imgB.stride);
 
     Float* a2 = tp.buffers[3] + offsetToTopLeft;
     Float* b2 = tp.buffers[4] + offsetToTopLeft;
@@ -882,11 +866,7 @@ static void process_tile_on_stack_in_thread(void* arg, unsigned tileNum) RMGR_NO
 // Main function
 
 
-float compute_ssim(uint32_t width, uint32_t height,
-                   const uint8_t* imgAData, ptrdiff_t imgAStep, ptrdiff_t imgAStride,
-                   const uint8_t* imgBData, ptrdiff_t imgBStep, ptrdiff_t imgBStride,
-                   float* ssimMap, ptrdiff_t ssimStep, ptrdiff_t ssimStride,
-                   ThreadPoolFct threadPool, void* threadPoolContext, unsigned threadCount, unsigned flags) RMGR_NOEXCEPT
+float compute_ssim(const Params& params) RMGR_NOEXCEPT
 {
     MultiplyFct     multiplyFct     = g_multiplyFct;
     GaussianBlurFct gaussianBlurFct = g_gaussianBlurFct;
@@ -905,7 +885,7 @@ float compute_ssim(uint32_t width, uint32_t height,
     if (ssimMap != NULL)
         sumTileFct = sum_tile;
 #else
-    if (ssimMap!=NULL && ssimStep!=1)
+    if (params.ssimMap!=NULL && params.ssimStep!=1)
         sumTileFct = sum_tile;
 #endif
 
@@ -915,18 +895,21 @@ float compute_ssim(uint32_t width, uint32_t height,
     const Float  c1 = Float((k1 * L) * (k1 * L));
     const Float  c2 = Float((k2 * L) * (k2 * L));
 
-    if (imgAData==NULL || imgBData==NULL)
+    if (params.imgA.topLeft==NULL || params.imgB.topLeft==NULL)
     {
-        RMGR_SSIM_REPORT_ERROR("Invalid parameter: imgAData or imgBData is NULL\n");
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: imgA.topLeft or imgB.topLeft is NULL\n");
         return -EINVAL;
     }
 
-    if (threadPool != NULL && threadCount == 0u)
+    if (params.threadPool != NULL && params.threadCount == 0u)
     {
         RMGR_SSIM_REPORT_ERROR("Invalid parameter: threadCount cannot be 0 if threadPool is not NULL\n");
         return -EINVAL;
     }
 
+    float*    ssimMap    = params.ssimMap;
+    ptrdiff_t ssimStep   = params.ssimStep;
+    ptrdiff_t ssimStride = params.ssimStride;
     if (ssimMap == NULL)
     {
         ssimStep   = 0;
@@ -940,17 +923,15 @@ float compute_ssim(uint32_t width, uint32_t height,
     Float const* const gaussianKernel = kernelBuffer + GAUSSIAN_RADIUS * (2*GAUSSIAN_RADIUS+1) + GAUSSIAN_RADIUS; // Center of the kernel
 
     // Prepare global parameters
+    const uint32_t width  = params.width;
+    const uint32_t height = params.height;
     const GlobalParams gp =
     {
         // User-specified parameters
         width,
         height,
-        imgAData,
-        imgAStep,
-        imgAStride,
-        imgBData,
-        imgBStep,
-        imgBStride,
+        params.imgA,
+        params.imgB,
         ssimMap,
         ssimStep,
         ssimStride,
@@ -975,12 +956,12 @@ float compute_ssim(uint32_t width, uint32_t height,
     const unsigned tileHorzCount     = (width  + TILE_MAX_WIDTH  - 1) / TILE_MAX_WIDTH;
     const unsigned tileVertCount     = (height + TILE_MAX_HEIGHT - 1) / TILE_MAX_HEIGHT;
     const unsigned tileCount         = tileHorzCount * tileVertCount;
-    const unsigned actualThreadCount = (threadPool != NULL) ? std::min(threadCount, maxThreadCount) : 1;
+    const unsigned actualThreadCount = (params.threadPool != NULL) ? std::min(params.threadCount, maxThreadCount) : 1;
 
     // Prepare thread params
     ThreadParams threadParams[maxThreadCount] = {};
     void*        threadArgs[maxThreadCount]   = {};
-    if (threadPool != NULL)
+    if (params.threadPool != NULL)
     {
         for (unsigned threadNum=0; threadNum < actualThreadCount; ++threadNum)
         {
@@ -994,20 +975,20 @@ float compute_ssim(uint32_t width, uint32_t height,
     // Process all tiles
     double sum = 0.0;
     int threadPoolResult = 0;
-    if (flags & FLAG_HEAP_BUFFERS)
+    if (params.alloc != NULL) // Use heap-allocated buffers
     {
-        Float* heapBuffer = static_cast<Float*>(alloc(6 * BUFFER_CAPACITY * actualThreadCount * sizeof(Float), RMGR_SSIM_TILE_ALIGNMENT));
+        Float* heapBuffer = static_cast<Float*>(params.alloc(6 * BUFFER_CAPACITY * actualThreadCount * sizeof(Float), RMGR_SSIM_TILE_ALIGNMENT));
         if (heapBuffer == NULL)
             return -ENOMEM;
 
-        if (threadPool != NULL)
+        if (params.threadPool != NULL)
         {
             for (unsigned threadNum=0; threadNum < actualThreadCount; ++threadNum)
             {
                 for (int i=0; i<6; ++i)
                     threadParams[threadNum].tileParams.buffers[i] = heapBuffer + (6*threadNum + i) * BUFFER_CAPACITY;
             }
-            threadPoolResult = threadPool(threadPoolContext, process_tile_in_thread, threadArgs, actualThreadCount, tileCount);
+            threadPoolResult = params.threadPool(params.threadPoolContext, process_tile_in_thread, threadArgs, actualThreadCount, tileCount);
         }
         else
         {
@@ -1022,12 +1003,12 @@ float compute_ssim(uint32_t width, uint32_t height,
                 }
             }
         }
-        dealloc(heapBuffer);
+        params.dealloc(heapBuffer);
     }
-    else
+    else                      // Use on-stack buffers
     {
-        if (threadPool != NULL)
-            threadPoolResult = threadPool(threadPoolContext, process_tile_on_stack_in_thread, threadArgs, actualThreadCount, tileCount);
+        if (params.threadPool != NULL)
+            threadPoolResult = params.threadPool(params.threadPoolContext, process_tile_on_stack_in_thread, threadArgs, actualThreadCount, tileCount);
         else
         {
             for (uint32_t tileY=0; tileY<height; tileY+=TILE_MAX_HEIGHT)
@@ -1037,7 +1018,7 @@ float compute_ssim(uint32_t width, uint32_t height,
     }
 
     // In case of threaded processing, perform the final sum
-    if (threadPool != NULL)
+    if (params.threadPool != NULL)
     {
         if (threadPoolResult != 0)
             return -ECHILD;
