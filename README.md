@@ -107,7 +107,8 @@ composite SSIM from per-channel SSIMs.
 Bit Depth Support
 -----------------
 Only 8-bit images are supported. However, it shouldn't be complicated to modify the code to support
-other bit depths: all that needs to be changed are the `L` constant and the `retrieve_tile()` function.
+other bit depths: all that needs to be changed are the <code>[L](https://github.com/romigrou/ssim/blob/8d684ba783a74540a8b3be748e9fcf8368be509f/src/ssim.cpp#L894)</code>
+constant and the <code>[retrieve_tile()](https://github.com/romigrou/ssim/blob/8d684ba783a74540a8b3be748e9fcf8368be509f/src/ssim.cpp#L451)</code> function.
 
 Building
 --------
