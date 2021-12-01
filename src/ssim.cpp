@@ -728,7 +728,7 @@ double process_tile_on_stack(uint32_t tileX, uint32_t tileY, const GlobalParams&
 
 
 //=================================================================================================
-// init_impl()
+// select_impl()
 
 
 volatile MultiplyFct     g_multiplyFct     = NULL;

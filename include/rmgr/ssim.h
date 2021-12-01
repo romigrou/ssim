@@ -383,13 +383,13 @@ typedef void (*ThreadFct)(void* arg, unsigned jobNum) RMGR_NOEXCEPT_TYPEDEF;
 /**
  * @brief Prototype for a thread pool implementation
  *
- * @param [in] fct         The function to run. All threads run the same function.
+ * @param [in] fct         The function to run (all threads run the same function).
  * @param [in] args        The argument to `fct` for each of the threads. There are `threadCount` entries in this array.<br>
  *                         Entries can be used in any order as long as an entry is used by only one thread at a time.
  * @param [in] threadCount How many concurrent threads can be used at the maximum.<br>
  *                         This value is non-zero and is &le; to the value passed to `compute_ssim()`.
  * @param [in] jobCount    How many times `fct` must be called in total.
- * @param [in] context     The value passed in to `compute-ssim` as `threadPoolContext`.
+ * @param [in] context     The value passed in to `compute_ssim` as `threadPoolContext`.
  *                         This is a user-defined value that can contain whatever.
  *
  * @retval 0     All went fine
@@ -427,6 +427,7 @@ struct ImgParams
     void init_interleaved(const uint8_t* data, ptrdiff_t imgStride, unsigned channelCount, unsigned channelNum) RMGR_NOEXCEPT
     {
         assert(data != NULL);
+        assert(channelNum < channelCount);
         topLeft = data + channelNum;
         step    = channelCount;
         stride  = imgStride;
@@ -469,7 +470,7 @@ struct UnthreadedParams
 
     // Allocation
     AllocFct       alloc;      ///< The allocation function. If `NULL`, stack storage is used.
-    DeallocFct     dealloc;    ///< The deallocation function. Ignored if `alloc` is ``NULL .
+    DeallocFct     dealloc;    ///< The deallocation function. Ignored if `alloc` is `NULL`.
 
     /**
      * @brief Sets the allocation functions to use `malloc()` and `free()`

@@ -47,7 +47,7 @@ enum Implementation
     IMPL_AVX     = 4, ///< Use the AVX  implementation if available
     IMPL_FMA     = 5, ///< Use the FMA  implementation if available
     IMPL_AVX512  = 6, ///< Use the AVX-512 implementation if available
-    IMPL_NEON    = 7  ///< Use the Neon (or ASIMD) implementation if available
+    IMPL_NEON    = 7  ///< Use the Neon/ASIMD implementation if available
 };
 
 unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT;
