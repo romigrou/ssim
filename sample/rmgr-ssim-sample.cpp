@@ -18,10 +18,10 @@
  * 3. This notice may not be removed or altered from any source distribution.
  */
 
-#define USE_OPENMP  1 // Set to 1 to use the OpenMP implementation
+// #define USE_OPENMP  1 // Set to 1 to use the OpenMP implementation
 
 #include <rmgr/ssim.h>
-#if USE_OPENMP
+#if RMGR_SSIM_USE_OPENMP
     #include <rmgr/ssim-openmp.h>
 #endif
 
@@ -75,12 +75,12 @@ extern "C" int main(int argc, char* argv[])
     rmgr::ssim::Params params = {};
     params.width  = img1Width;
     params.height = img1Height;
-    const int stride = img1Width * img1ChannelCount;
+    //const int stride = img1Width * img1ChannelCount;
     for (int channelNum=0; channelNum < img1ChannelCount; ++channelNum)
     {
         params.imgA.init_interleaved(img1, img1Width*img1ChannelCount, channelNum, img1ChannelCount);
         params.imgB.init_interleaved(img2, img2Width*img2ChannelCount, channelNum, img2ChannelCount);
-#if USE_OPENMP
+#if RMGR_SSIM_USE_OPENMP
         const float ssim = rmgr::ssim::compute_ssim_openmp(params);
 #else
         const float ssim = rmgr::ssim::compute_ssim(params);

@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <cctype>
 #include <cstring>
 #ifdef _WIN32
     #include <tchar.h>
@@ -34,7 +35,9 @@
     #define _T(s)     s
     #define _tmain    main
     #define _tcscmp   strcmp
-    #define _fprintf  fprintf
+    #define _ftprintf fprintf
+    #define _tfopen   fopen
+    #define _tcsrchr  strrchr
 #endif
 
 
@@ -263,7 +266,7 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
     else if( channelCount1 != channelCount2)
         fprintf(stderr, "Images do not have the same number of channels: %u vs %u\n", channelCount1, channelCount2);
     else if (onlyChannel >=0 && onlyChannel >= channelCount1)
-        fprintf(stderr, "Cannot compute SSIM for channel %u, images have only % channels\n", onlyChannel, channelCount1);
+        fprintf(stderr, "Cannot compute SSIM for channel %u, images have only %u channels\n", onlyChannel, channelCount1);
     else
         retval = compute_ssims(img1, img2, width1, height1, channelCount1, onlyChannel, luminance, map, mapChannelCount);
 
@@ -273,11 +276,11 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
         MapFormat mapFormat = MAP_FORMAT_TGA;
         if (ext == NULL)
             fprintf(stderr, "Cannot deduce file format from extension, saving as tga\n");
-        else if (_tcsicmp(ext, _T(".bmp")) == 0)
+        else if (ext[0] == '.' && ext[1] != 0 && tolower(ext[1]) == 'b' && ext[2] != 0 && tolower(ext[2]) == 'm' && ext[3] != 0 && tolower(ext[3]) == 'p')
             mapFormat = MAP_FORMAT_BMP;
-        else if (_tcsicmp(ext, _T(".png")) == 0)
+        else if (ext[0] == '.' && ext[1] != 0 && tolower(ext[1]) == 'p' && ext[2] != 0 && tolower(ext[2]) == 'n' && ext[3] != 0 && tolower(ext[3]) == 'g')
             mapFormat = MAP_FORMAT_PNG;
-        else if (_tcsicmp(ext, _T(".tga")) == 0)
+        else if (ext[0] == '.' && ext[1] != 0 && tolower(ext[1]) == 't' && ext[2] != 0 && tolower(ext[2]) == 'g' && ext[3] != 0 && tolower(ext[3]) == 'a')
             mapFormat = MAP_FORMAT_TGA;
         else
             retval = EXIT_FAILURE;
