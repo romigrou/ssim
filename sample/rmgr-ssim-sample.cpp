@@ -32,7 +32,11 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG
+RMGR_WARNING_PUSH()
+RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
+RMGR_WARNING_GCC_DISABLE("-Wunused-but-set-variable")
 #include "stb_image.h"
+RMGR_WARNING_POP()
 
 
 extern "C" int main(int argc, char* argv[])
@@ -75,7 +79,6 @@ extern "C" int main(int argc, char* argv[])
     rmgr::ssim::Params params = {};
     params.width  = img1Width;
     params.height = img1Height;
-    const int stride = img1Width * img1ChannelCount;
     for (int channelNum=0; channelNum < img1ChannelCount; ++channelNum)
     {
         params.imgA.init_interleaved(img1, img1Width*img1ChannelCount, channelNum, img1ChannelCount);

@@ -40,11 +40,19 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG
+RMGR_WARNING_PUSH()
+RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
+RMGR_WARNING_GCC_DISABLE("-Wunused-but-set-variable")
 #include "stb_image.h"
+RMGR_WARNING_POP()
 
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+RMGR_WARNING_PUSH()
+RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
 #include "stb_image_write.h"
+RMGR_WARNING_POP()
+
 
 namespace
 {
