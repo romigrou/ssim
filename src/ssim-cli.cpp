@@ -34,7 +34,10 @@
     #define _T(s)     s
     #define _tmain    main
     #define _tcscmp   strcmp
-    #define _fprintf  fprintf
+    #define _tcsicmp  strcasecmp
+    #define _tcsrchr  strrchr
+    #define _tfopen   fopen
+    #define _ftprintf fprintf
 #endif
 
 
