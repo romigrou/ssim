@@ -271,7 +271,7 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
     else if( channelCount1 != channelCount2)
         fprintf(stderr, "Images do not have the same number of channels: %u vs %u\n", channelCount1, channelCount2);
     else if (onlyChannel >=0 && onlyChannel >= channelCount1)
-        fprintf(stderr, "Cannot compute SSIM for channel %u, images have only % channels\n", onlyChannel, channelCount1);
+        fprintf(stderr, "Cannot compute SSIM for channel %u, images have only %u channels\n", onlyChannel, channelCount1);
     else
         retval = compute_ssims(img1, img2, width1, height1, channelCount1, onlyChannel, luminance, map, mapChannelCount);
 
