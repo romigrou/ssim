@@ -56,7 +56,8 @@ enum MapFormat
 {
     MAP_FORMAT_BMP,
     MAP_FORMAT_PNG,
-    MAP_FORMAT_TGA
+    MAP_FORMAT_TGA,
+    MAP_FORMAT_PFM,
 };
 
 }
@@ -175,13 +176,16 @@ static int compute_ssims(const stbi_uc* img1, const stbi_uc* img2, int width, in
     }
     else
     {
+        float average = 0.0f;
         for (int c=0; c<channelCount; ++c)
         {
             float ssim = compute_ssim(img1, img2, width, height, channelCount, c, map, mapChannelCount, (map!=NULL)?c: 0);
             if (rmgr::ssim::get_errno(ssim) != 0)
                 return EXIT_FAILURE;
             printf("Channel %u: % 7.4f\n", c, ssim);
+            average += ssim;
         }
+        printf("Average  : % 7.4f\n", average/3.0f);
     }
 
     return EXIT_SUCCESS;
@@ -282,6 +286,8 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
             mapFormat = MAP_FORMAT_PNG;
         else if (ext[0] == '.' && ext[1] != 0 && tolower(ext[1]) == 't' && ext[2] != 0 && tolower(ext[2]) == 'g' && ext[3] != 0 && tolower(ext[3]) == 'a')
             mapFormat = MAP_FORMAT_TGA;
+        else if (ext[0] == '.' && ext[1] != 0 && tolower(ext[1]) == 'p' && ext[2] != 0 && tolower(ext[2]) == 'f' && ext[3] != 0 && tolower(ext[3]) == 'm')
+            mapFormat = MAP_FORMAT_PFM;
         else
             retval = EXIT_FAILURE;
 
@@ -306,7 +312,7 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
                 {
                     for (unsigned i=0; i<mapSize; ++i)
                         map8[i] = static_cast<uint8_t>(std::max(0.0f, map[i]) * 255.0f);
- 
+
                     switch (mapFormat)
                     {
                         case MAP_FORMAT_BMP:
@@ -317,6 +323,40 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
                             break;
                         case MAP_FORMAT_PNG:
                             stbi_write_png_to_func(stbi__stdio_write, mapFile, width1, height1, mapChannelCount, map8, width1*mapChannelCount);
+                            break;
+                        case MAP_FORMAT_PFM:       
+                            {
+                                // negative scale for little endian
+                                fprintf(mapFile, "Pf\n%d %d\n-1.0\n", width1, height1);
+                                float* tempLine = new float[width1];
+                                for (int y = height1 - 1; y >= 0; --y) 
+                                {
+                                    if (mapChannelCount == 1) {
+                                        const float *sp = map + y * width1;
+                                        float *dp = tempLine;
+                                        for (int x = 0; x < width1; ++x)
+                                            *dp++ = *sp++;
+                                    }
+                                    else 
+                                    {
+                                        const float *sp = map + y * width1 * mapChannelCount;
+                                        float *dp = tempLine;
+                                        for (int x = 0; x < width1; ++x)
+                                        {
+                                            float val = *sp++;
+                                            val += *sp++;
+                                            val += *sp++;
+                                            *dp++ = val / 3.0f;
+                                        }
+                                    }
+                                    if (fwrite(tempLine, sizeof(float), width1, mapFile) != width1) 
+                                    {
+                                        printf("Error writing to pfm file!\n");
+                                        retval = EXIT_FAILURE;
+                                    }
+                                }
+                                delete[] tempLine;
+                            }
                             break;
                     }
                 }
