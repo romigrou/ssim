@@ -882,7 +882,7 @@ float compute_ssim(const Params& params) RMGR_NOEXCEPT
 
     // SIMD versions of sum_tile() only support ssimStep==1 and when not using double
 #if RMGR_SSIM_USE_DOUBLE
-    if (ssimMap != NULL)
+    if (params.ssimMap != NULL)
         sumTileFct = sum_tile;
 #else
     if (params.ssimMap!=NULL && params.ssimStep!=1)
