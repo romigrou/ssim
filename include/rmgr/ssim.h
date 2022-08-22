@@ -255,6 +255,47 @@
     #define RMGR_ARCH_IS_ARM_ANY  (RMGR_ARCH_IS_ARM_32 || RMGR_ARCH_IS_ARM_64)
 #endif
 
+/**
+ * @brief Whether the architecture is little endian
+ *
+ * @note In some exotic cases (PDP), the architecture may be neither little nor big endian.
+ *
+ * @see `#RMGR_ARCH_IS_BIG_ENDIAN`
+ */
+#ifndef RMGR_ARCH_IS_LITTLE_ENDIAN
+    #if defined(RMGR_ARCH_IS_BIG_ENDIAN) && RMGR_ARCH_IS_BIG_ENDIAN
+        #define RMGR_ARCH_IS_LITTLE_ENDIAN  0
+    #elif defined(__BYTE_ORDER__) && __BYTE_ORDER__==__ORDER_LITTLE_ENDIAN__
+        #define RMGR_ARCH_IS_LITTLE_ENDIAN  1
+    #elif RMGR_ARCH_IS_X86_ANY
+        #define RMGR_ARCH_IS_LITTLE_ENDIAN  1 // x86 is always little endian
+    #elif defined(_WIN32)
+        #define RMGR_ARCH_IS_LITTLE_ENDIAN  1 // Windows is always little endian (as of now at least)
+    #else
+        #define RMGR_ARCH_IS_LITTLE_ENDIAN  0
+    #endif
+#endif
+
+/**
+ * @brief Whether the architecture is big endian
+ *
+ * @note In some exotic cases (PDP), the architecture may be neither little nor big endian.
+ *
+ * @see `#RMGR_ARCH_IS_LITTLE_ENDIAN`
+ */
+#ifndef RMGR_ARCH_IS_BIG_ENDIAN
+    #if defined(RMGR_ARCH_IS_LITTLE_ENDIAN) && RMGR_ARCH_IS_LITTLE_ENDIAN
+        #define RMGR_ARCH_IS_BIG_ENDIAN  0
+    #elif defined(__BYTE_ORDER__) && __BYTE_ORDER__==__ORDER_BIG_ENDIAN__
+        #define RMGR_ARCH_IS_BIG_ENDIAN  1
+    #else
+        #define RMGR_ARCH_IS_BIG_ENDIAN  0
+    #endif
+#endif
+
+#if RMGR_ARCH_IS_LITTLE_ENDIAN && RMGR_ARCH_IS_BIG_ENDIAN
+    #error Architecture cannot be both little and big endian
+#endif
 
 //=================================================================================================
 // C++ version

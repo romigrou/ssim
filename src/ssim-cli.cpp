@@ -341,8 +341,14 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
                             break;
                         case MAP_FORMAT_PFM:       
                             {
-                                // negative scale for little endian
-                                fprintf(mapFile, "P%c\n%d %d\n-1.0\n", (mapChannelCount==1)?'f':'F', width1, height1);
+#if RMGR_ARCH_IS_LITTLE_ENDIAN
+                                #define PFM_ENDIANNESS  "-1.0"
+#elif RMGR_ARCH_IS_BIG_ENDIAN
+                                #define PFM_ENDIANNESS  "1.0"
+#else
+    #error Unsupported (or unknown) endianness
+#endif
+                                fprintf(mapFile, "P%c\n%d %d\n" PFM_ENDIANNESS "\n", (mapChannelCount==1)?'f':'F', width1, height1);
                                 const size_t mapStride = width1 * mapChannelCount;
                                 for (int y = height1; --y >= 0;) 
                                 {
