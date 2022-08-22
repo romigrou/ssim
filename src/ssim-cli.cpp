@@ -342,35 +342,17 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
                         case MAP_FORMAT_PFM:       
                             {
                                 // negative scale for little endian
-                                fprintf(mapFile, "Pf\n%d %d\n-1.0\n", width1, height1);
-                                float* tempLine = new float[width1];
-                                for (int y = height1 - 1; y >= 0; --y) 
+                                fprintf(mapFile, "P%c\n%d %d\n-1.0\n", (mapChannelCount==1)?'f':'F', width1, height1);
+                                const size_t mapStride = width1 * mapChannelCount;
+                                for (int y = height1; --y >= 0;) 
                                 {
-                                    if (mapChannelCount == 1) {
-                                        const float *sp = map + y * width1;
-                                        float *dp = tempLine;
-                                        for (int x = 0; x < width1; ++x)
-                                            *dp++ = *sp++;
-                                    }
-                                    else 
+                                    if (fwrite(map+y*mapStride, sizeof(float), mapStride, mapFile) != mapStride)
                                     {
-                                        const float *sp = map + y * width1 * mapChannelCount;
-                                        float *dp = tempLine;
-                                        for (int x = 0; x < width1; ++x)
-                                        {
-                                            float val = *sp++;
-                                            val += *sp++;
-                                            val += *sp++;
-                                            *dp++ = val / 3.0f;
-                                        }
-                                    }
-                                    if (fwrite(tempLine, sizeof(float), width1, mapFile) != width1) 
-                                    {
-                                        printf("Error writing to pfm file!\n");
+                                        _ftprintf(stderr, _T("Error writing to file \"%s\"\n"), mapPath);
                                         retval = EXIT_FAILURE;
+                                        break;
                                     }
                                 }
-                                delete[] tempLine;
                             }
                             break;
                     }
