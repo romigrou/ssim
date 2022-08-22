@@ -26,7 +26,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
-#include <cctype>
 #include <cstring>
 #ifdef _WIN32
     #include <tchar.h>
@@ -194,7 +193,7 @@ static int compute_ssims(const stbi_uc* img1, const stbi_uc* img2, int width, in
             printf("Channel %u: % 7.4f\n", c, ssim);
             average += ssim;
         }
-        printf("Average  : % 7.4f\n", average/3.0f);
+        printf("Average  : % 7.4f\n", average/channelCount);
     }
 
     return EXIT_SUCCESS;
@@ -295,8 +294,15 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
             mapFormat = MAP_FORMAT_PNG;
         else if (_tcsicmp(ext, _T(".tga")) == 0)
             mapFormat = MAP_FORMAT_TGA;
-        else if (ext[0] == '.' && ext[1] != 0 && tolower(ext[1]) == 'p' && ext[2] != 0 && tolower(ext[2]) == 'f' && ext[3] != 0 && tolower(ext[3]) == 'm')
+        else if (_tcsicmp(ext, _T(".pfm")) == 0)
+        {
             mapFormat = MAP_FORMAT_PFM;
+            if (mapChannelCount != 1 && mapChannelCount != 3)
+            {
+                _ftprintf(stderr, _T("PFM images can only contain 1 or 3 channels but the map contains %d channels\n"), mapChannelCount);
+                retval = EXIT_FAILURE;
+            }
+        }
         else
             retval = EXIT_FAILURE;
 
