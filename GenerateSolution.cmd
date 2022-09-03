@@ -31,8 +31,8 @@ set PKG_DIR=%~dp0package
 set CMAKE_OPTIONS= -DRMGR_SSIM_BUILD_CLI=ON -DRMGR_SSIM_BUILD_SAMPLE=ON -DRMGR_SSIM_BUILD_TESTS=ON -DRMGR_SSIM_USE_OPENMP=ON
 
 
-:: List of VS versions, can be any combination of 2003 2005 2008 2010 2012 2013 2015 2017 2019
-set DESIRED_YEARS=2005 2008 2010 2012 2013 2015 2017 2019
+:: List of VS versions, can be any combination of 2003 2005 2008 2010 2012 2013 2015 2017 2019 2022
+set DESIRED_YEARS=2005 2008 2010 2012 2013 2015 2017 2019 2022
 
 :: List of VS platforms, can be any combination of Win32 x64 IA64 ARM ARM64
 set DESIRED_PLATFORMS=Win32 x64 ARM ARM64
@@ -95,6 +95,7 @@ set VS2013_INDEX=0
 set VS2015_INDEX=0
 set VS2017_INDEX=0
 set VS2019_INDEX=0
+set VS2022_INDEX=0
 
 set INDEX=1
 for %%y in (%DESIRED_YEARS%) do (
@@ -115,11 +116,12 @@ if %VS2013_INDEX% NEQ 0 echo  %VS2013_INDEX%- Visual Studio 12  (2013)
 if %VS2015_INDEX% NEQ 0 echo  %VS2015_INDEX%- Visual Studio 14  (2015)
 if %VS2017_INDEX% NEQ 0 echo  %VS2017_INDEX%- Visual Studio 15  (2017)
 if %VS2019_INDEX% NEQ 0 echo  %VS2019_INDEX%- Visual Studio 16  (2019)
+if %VS2022_INDEX% NEQ 0 echo  %VS2022_INDEX%- Visual Studio 17  (2022)
 set CHOICE=
 set /p CHOICE=
 echo.
 if "%CHOICE%"=="0" goto ChooseGenerator
-for %%y in (2003 2005 2008 2010 2012 2013 2015 2017 2019) do (
+for %%y in (2003 2005 2008 2010 2012 2013 2015 2017 2019 2022) do (
 	if "%CHOICE%"=="!VS%%y_INDEX!" goto VS%%y
 )
 goto ChooseGenerator
@@ -184,6 +186,13 @@ goto CheckGenerator
 set "GENERATOR=Visual Studio 16 2019"
 set VS_YEAR=2019
 set VC_VERSION=19.2
+set SUPPORTED_PLATFORMS=Win32 x64 ARM ARM64
+goto CheckGenerator
+
+:VS2022
+set "GENERATOR=Visual Studio 17 2022"
+set VS_YEAR=2022
+set VC_VERSION=19.3
 set SUPPORTED_PLATFORMS=Win32 x64 ARM ARM64
 goto CheckGenerator
 
