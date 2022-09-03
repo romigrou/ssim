@@ -392,7 +392,7 @@ namespace rmgr { namespace ssim
     const uint8_t UINT8_MAX = 255;
 }}
 #else
-#include <cstdint>
+#include <stdint.h>
 namespace rmgr { namespace ssim
 {
     typedef ::uint8_t  uint8_t;
