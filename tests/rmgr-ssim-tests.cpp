@@ -319,7 +319,7 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
 }
 
 
-static void test_einstein(rmgr::ssim::Implementation impl, bool openmp, unsigned flags, bool buildSsimMap)
+static void test_einstein(rmgr::ssim::Implementation impl, bool openmp, bool useHeap, bool buildSsimMap)
 {
     // These are the examples from the original SSIM page
     static char const* const files[] =
@@ -349,7 +349,7 @@ static void test_einstein(rmgr::ssim::Implementation impl, bool openmp, unsigned
     {
         char imgPath[256];
         snprintf(imgPath, sizeof(imgPath), "%s/%s", g_imagesDir, files[i]);
-        test_compute_ssim(imgPath, refPath, impl, openmp, flags, buildSsimMap, ssims+i);
+        test_compute_ssim(imgPath, refPath, impl, openmp, useHeap, buildSsimMap, ssims+i);
     }
 }
 
