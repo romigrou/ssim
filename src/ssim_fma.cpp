@@ -268,6 +268,8 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 
     #undef k
 #endif
+
+    _mm256_zeroupper();
 }
 
 

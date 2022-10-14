@@ -102,6 +102,7 @@ static void multiply(Float* product, const Float* a, const Float* b, uint32_t wi
         b       += stride;
         product += stride;
     }
+    _mm256_zeroupper();
 }
 
 
@@ -284,6 +285,8 @@ static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, 
 
     #undef k
 #endif
+
+    _mm256_zeroupper();
 }
 
 
@@ -402,6 +405,7 @@ double sum_tile(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Fl
 
     }
 
+    _mm256_zeroupper();
     return tileSum;
 }
 
