@@ -228,7 +228,7 @@ if (RMGR_SSIM_BUILD_SAMPLE)
     target_compile_options(rmgr-ssim-sample PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
     target_include_directories(rmgr-ssim-sample PRIVATE "src")
     if (WIN32)
-        target_compile_definitions(rmgr-ssim-cli PRIVATE "_CRT_SECURE_NO_WARNINGS")
+        target_compile_definitions(rmgr-ssim-sample PRIVATE "_CRT_SECURE_NO_WARNINGS")
     endif()
 endif()
 
