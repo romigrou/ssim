@@ -462,7 +462,7 @@ struct ImgParams
      * @param [in] data         Pointer to the image's top-left pixel
      * @param [in] imgStride    The distance (in bytes) between a pixel and the one immediately below it.
      *                          This is negative for bottom-up images.
-     * @param [in] channelNum   The channel's whose SSIM is to be computed
+     * @param [in] channelNum   The channel whose SSIM is to be computed
      * @param [in] channelCount How many channels the image contains
      */
     void init_interleaved(const uint8_t* data, ptrdiff_t imgStride, unsigned channelCount, unsigned channelNum) RMGR_NOEXCEPT
@@ -475,12 +475,12 @@ struct ImgParams
     }
 
     /**
-     * @brief Sets the parameters for an interleaved image (assuming one channel per plane)
+     * @brief Sets the parameters for a planar image (assuming one channel per plane)
      *
      * @param [in] planes   For each plane, a pointer to its top-left pixel
      * @param [in] strides  For each plane, the distance (in bytes) between a pixel and the one immediately below it.
      *                      This is negative for bottom-up images.
-     * @param [in] planeNum The channel's whose SSIM is to be computed
+     * @param [in] planeNum The channel whose SSIM is to be computed
      */
     void init_planar(uint8_t const* const planes[], const ptrdiff_t strides[], unsigned planeNum) RMGR_NOEXCEPT
     {
