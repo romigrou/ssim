@@ -26,9 +26,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#if RMGR_SSIM_USE_OPENMP && defined(_OPENMP)
-    #include <omp.h>
-#endif
 #if RMGR_ARCH_IS_ARM_ANY && defined(__linux__)
     #include <asm/hwcap.h>
     #include <sys/auxv.h>

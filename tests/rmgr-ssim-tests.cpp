@@ -20,7 +20,9 @@
 
 #include "ssim_naive.h"
 #include <rmgr/ssim.h>
-#include <rmgr/ssim-openmp.h>
+#if RMGR_SSIM_USE_OPENMP
+    #include <rmgr/ssim-openmp.h>
+#endif
 #include "../src/ssim_internal.h"
 #include <gtest/gtest.h>
 
@@ -173,7 +175,7 @@ extern "C" int main(int argc, char** argv)
 
     printf("\n"
            "         ||=====================|=====================|=====================|=====================|\n"
-           "         ||     Without map     |      With map       |   OpenMp w/o map    |    OpenMp w/ map    |\n"
+           "         ||     Without map     |      With map       |   OpenMP w/o map    |    OpenMP w/ map    |\n"
            "|========||=====================|=====================|=====================|=====================|");
     for (unsigned impl=0; impl<IMPL_COUNT; ++impl)
     {
@@ -278,9 +280,11 @@ void test_compute_ssim(const char* imgPath, const char* refPath, rmgr::ssim::Imp
 
         Ticks t1 = get_ticks();
         float ssim;
+#if RMGR_SSIM_USE_OPENMP
         if (openmp)
             ssim = rmgr::ssim::compute_ssim_openmp(params);
         else
+#endif
             ssim = rmgr::ssim::compute_ssim(params);
         Ticks t2 = get_ticks();
         perfInfo.ticks      += t2 - t1;
@@ -461,7 +465,7 @@ static void test_bbb257(rmgr::ssim::Implementation impl, bool openmp, bool useHe
         DO_TEST_IMPL(name, impl, IMPL, ,        false) \
         DO_TEST_IMPL(name, impl, IMPL, _openmp, true)
 #else
-    #define TEST_IMPL(name, impl, IMPL)  DO_TEST_IMPL(name, impl, IMPL, , false, 0)
+    #define TEST_IMPL(name, impl, IMPL)  DO_TEST_IMPL(name, impl, IMPL, , false)
 #endif
 
 #define TEST_AUTO(name)     TEST_IMPL(name, auto,    IMPL_AUTO)

@@ -107,8 +107,9 @@ target_link_libraries(rmgr-ssim-tests PRIVATE
     rmgr-ssim
 )
 
-if (RMGR_SSIM_USE_OPENMP)
+if (TARGET rmgr-ssim-openmp)
     target_link_libraries(rmgr-ssim-tests PRIVATE rmgr-ssim-openmp)
+    target_compile_definitions(rmgr-ssim-tests PRIVATE "RMGR_SSIM_USE_OPENMP=1")
 endif()
 
 

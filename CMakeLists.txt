@@ -30,7 +30,7 @@ include(GNUInstallDirs)
 # Options
 
 option(RMGR_SSIM_USE_DOUBLE   "Whether to use double instead of float for increased precision (but slower)" OFF)
-option(RMGR_SSIM_USE_OPENMP   "Whether to use OpenMP for multi-threaded processing"                         OFF)
+option(RMGR_SSIM_NO_OPENMP    "Don't build rmgr-ssim-openmp"                                                OFF)
 option(RMGR_SSIM_BUILD_CLI    "Whether to build the command line interface"                                 OFF)
 option(RMGR_SSIM_BUILD_SAMPLE "Whether to build the sample program "                                        OFF)
 option(RMGR_SSIM_BUILD_TESTS  "Whether to build rmgr::ssim's unit tests"                                    OFF)
@@ -42,13 +42,6 @@ if (RMGR_SSIM_USE_DOUBLE)
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_DOUBLE=1")
 else()
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_DOUBLE=0")
-endif()
-
-if (RMGR_SSIM_USE_OPENMP)
-    find_package(OpenMP)
-    list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_OPENMP=1")
-else()
-    list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_OPENMP=0")
 endif()
 
 
@@ -121,10 +114,6 @@ set(RMGR_SSIM_FILES
     "src/ssim_neon.cpp"
 )
 
-if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
-    set_source_files_properties("src/ssim.cpp" PROPERTIES COMPILE_OPTIONS "${OpenMP_CXX_FLAGS}")
-endif()
-
 include(CheckCXXCompilerFlag)
 foreach (is sse avx fma neon avx512)
     string(TOUPPER "${is}" ISU)
@@ -140,7 +129,7 @@ source_group("Source Files" FILES ${RMGR_SSIM_FILES})
 
 
 ###################################################################################################
-# Library
+# Libraries
 
 add_library(rmgr-ssim STATIC ${RMGR_SSIM_FILES})
 
@@ -155,7 +144,10 @@ target_include_directories(rmgr-ssim
 target_compile_options(rmgr-ssim PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
 target_compile_definitions(rmgr-ssim PRIVATE ${RMGR_SSIM_DEFINITIONS} _USE_MATH_DEFINES)
 
-if (RMGR_SSIM_USE_OPENMP AND OpenMP_CXX_FOUND)
+if (NOT RMGR_SSIM_NO_OPENMP)
+    find_package(OpenMP)
+endif()
+if ((NOT RMGR_SSIM_NO_OPENMP) AND OpenMP_CXX_FOUND)
     set(RMGR_SSIM_OPENMP_FILES
         "include/rmgr/ssim-openmp.h"
         "src/ssim-openmp.cpp"
@@ -201,8 +193,9 @@ endif()
 
 if (RMGR_SSIM_BUILD_CLI)
     add_executable(rmgr-ssim-cli "src/ssim-cli.cpp")
-    if (RMGR_SSIM_USE_OPENMP)
+    if (TARGET rmgr-ssim-openmp)
         target_link_libraries(rmgr-ssim-cli PRIVATE rmgr-ssim-openmp)
+        add_compile_definitions(rmgr-ssim-cli PRIVATE "RMGR_SSIM_USE_OPENMP=1")
     else()
         target_link_libraries(rmgr-ssim-cli PRIVATE rmgr-ssim)
     endif()
@@ -220,8 +213,9 @@ endif()
 
 if (RMGR_SSIM_BUILD_SAMPLE)
     add_executable(rmgr-ssim-sample "sample/rmgr-ssim-sample.cpp")
-    if (RMGR_SSIM_USE_OPENMP)
+    if (TARGET rmgr-ssim-openmp)
         target_link_libraries(rmgr-ssim-sample PRIVATE rmgr-ssim-openmp)
+        add_compile_definitions(rmgr-ssim-sample PRIVATE "RMGR_SSIM_USE_OPENMP=1")
     else()
         target_link_libraries(rmgr-ssim-sample PRIVATE rmgr-ssim)
     endif()
