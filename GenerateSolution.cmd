@@ -31,11 +31,11 @@ set PKG_DIR=%~dp0package
 set CMAKE_OPTIONS= -DRMGR_SSIM_BUILD_CLI=ON -DRMGR_SSIM_BUILD_SAMPLE=ON -DRMGR_SSIM_BUILD_TESTS=ON -DRMGR_SSIM_USE_OPENMP=ON
 
 
-:: List of VS versions, can be any combination of 2003 2005 2008 2010 2012 2013 2015 2017 2019 2022
+:: List of VS versions, can be any combination of 2003 2005 2008 2010 2012 2013 2015 2017 2019
 set DESIRED_YEARS=2005 2008 2010 2012 2013 2015 2017 2019 2022
 
 :: List of VS platforms, can be any combination of Win32 x64 IA64 ARM ARM64
-set DESIRED_PLATFORMS=Win32 x64 ARM ARM64
+set DESIRED_PLATFORMS=Win32 x64 Win32_Clang x64_Clang ARM ARM64
 
 :: Normalize paths
 for %%v in (SOURCE_DIR BUILD_DIR BIN_DIR LIB_DIR PKG_DIR) do (
@@ -86,16 +86,10 @@ if not "%~1"=="" (
 
 if not "%VS_LABEL%"=="" goto %VS_LABEL%
 
-set VS2003_INDEX=0
-set VS2005_INDEX=0
-set VS2008_INDEX=0
-set VS2010_INDEX=0
-set VS2012_INDEX=0
-set VS2013_INDEX=0
-set VS2015_INDEX=0
-set VS2017_INDEX=0
-set VS2019_INDEX=0
-set VS2022_INDEX=0
+set ALL_YEARS=2003 2005 2008 2010 2012 2013 2015 2017 2019 2022
+set CLANG_TOOLSET=
+
+for %%y in (%ALL_YEARS%) do set VS%%y_INDEX=0
 
 set INDEX=1
 for %%y in (%DESIRED_YEARS%) do (
@@ -121,7 +115,7 @@ set CHOICE=
 set /p CHOICE=
 echo.
 if "%CHOICE%"=="0" goto ChooseGenerator
-for %%y in (2003 2005 2008 2010 2012 2013 2015 2017 2019 2022) do (
+for %%y in (%ALL_YEARS%) do (
 	if "%CHOICE%"=="!VS%%y_INDEX!" goto VS%%y
 )
 goto ChooseGenerator
@@ -186,14 +180,16 @@ goto CheckGenerator
 set "GENERATOR=Visual Studio 16 2019"
 set VS_YEAR=2019
 set VC_VERSION=19.2
-set SUPPORTED_PLATFORMS=Win32 x64 ARM ARM64
+set CLANG_TOOLSET=ClangCL
+set SUPPORTED_PLATFORMS=Win32 x64 Win32_Clang x64_Clang ARM ARM64
 goto CheckGenerator
 
 :VS2022
 set "GENERATOR=Visual Studio 17 2022"
 set VS_YEAR=2022
 set VC_VERSION=19.3
-set SUPPORTED_PLATFORMS=Win32 x64 ARM ARM64
+set CLANG_TOOLSET=ClangCL
+set SUPPORTED_PLATFORMS=Win32 x64 Win32_Clang x64_Clang ARM ARM64
 goto CheckGenerator
 
 :CheckGenerator
@@ -210,11 +206,11 @@ goto Error
 
 if not "%PLATFORM_LABEL%"=="" goto %PLATFORM_LABEL%
 
-set WIN32_INDEX=0
-set X64_INDEX=0
-set IA64_INDEX=0
-set ARM_INDEX=0
-set ARM64_INDEX=0
+set ALL_PLATFORMS=WIN32 X64 WIN32_CLANG X64_CLANG IA64 ARM ARM64
+set TOOLSET=
+
+for %%p in (%ALL_PLATFORMS%) do set %%p_INDEX=0
+
 set INDEX=1
 for %%p in (%SUPPORTED_PLATFORMS%) do (
 	for %%d in (%DESIRED_PLATFORMS%) do (
@@ -233,24 +229,34 @@ if %INDEX% equ 1 goto %PLATFORM%
 
 :ChoosePlatform
 echo Which platform to you want to generate for?
-if %WIN32_INDEX% neq 0 echo  %WIN32_INDEX%- x86
-if %X64_INDEX%   neq 0 echo  %X64_INDEX%- AMD64
-if %IA64_INDEX%  neq 0 echo  %IA64_INDEX%- IA64
-if %ARM_INDEX%   neq 0 echo  %ARM_INDEX%- ARM
-if %ARM64_INDEX% neq 0 echo  %ARM64_INDEX%- ARM64
+if %WIN32_INDEX%       neq 0 echo  %WIN32_INDEX%- x86
+if %X64_INDEX%         neq 0 echo  %X64_INDEX%- AMD64
+if %WIN32_CLANG_INDEX% neq 0 echo  %WIN32_CLANG_INDEX%- x86   (Clang)
+if %X64_CLANG_INDEX%   neq 0 echo  %X64_CLANG_INDEX%- AMD64 (Clang)
+if %IA64_INDEX%        neq 0 echo  %IA64_INDEX%- IA64
+if %ARM_INDEX%         neq 0 echo  %ARM_INDEX%- ARM
+if %ARM64_INDEX%       neq 0 echo  %ARM64_INDEX%- ARM64
 set CHOICE=
 set /p CHOICE=
 echo.
-for %%p in (Win32 x64 IA64 ARM ARM64) do (
+for %%p in (%ALL_PLATFORMS%) do (
 	if "%CHOICE%"=="!%%p_INDEX!" goto %%p
 )
 goto ChoosePlatform
+
+:Win32_clang
+set TOOLSET=%CLANG_TOOLSET%
 
 :Win32
 :x86
 set PLATFORM=Win32
 set ARCH=x86
 goto CheckPlatform
+
+:x64_clang
+:amd64_clang
+:x86_64_clang
+set TOOLSET=%CLANG_TOOLSET%
 
 :x64
 :amd64
@@ -301,7 +307,12 @@ if %VS_YEAR% lss 2017 (
 	set CMAKE_OPTIONS=%CMAKE_OPTIONS% -A %PLATFORM%
 )
 
-set TRIPLET=windows-%ARCH%-msvc%VC_VERSION%
+if "%TOOLSET%" == "" (
+    set TRIPLET=windows-%ARCH%-msvc%VC_VERSION%
+) else (
+    set CMAKE_OPTIONS=%CMAKE_OPTIONS% -T %TOOLSET%
+    set TRIPLET=windows-%ARCH%-%TOOLSET%
+)
 set QUADRUPLET=%TRIPLET%-vs%VS_YEAR%
 set BUILD_DIR=%BUILD_DIR%\%QUADRUPLET%
 set CMAKE_OPTIONS=%CMAKE_OPTIONS% "-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY:PATH=%LIB_DIR%\%QUADRUPLET%"
