@@ -25,6 +25,7 @@
 #endif
 #include "../src/ssim_internal.h"
 #include <gtest/gtest.h>
+#include <climits>
 
 
 #define STB_IMAGE_IMPLEMENTATION
