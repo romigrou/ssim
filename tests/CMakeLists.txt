@@ -68,7 +68,7 @@ if (TARGET gtest)
 else()
     find_package(GTest)
     if (NOT GTEST_FOUND)
-        set(GTEST_VERSION 1.10.0)
+        set(GTEST_VERSION 1.12.1)
         set(GTEST_DIR     "${CMAKE_CURRENT_SOURCE_DIR}/gtest/googletest-release-${GTEST_VERSION}")
         set(GTEST_URL     "https://github.com/google/googletest/archive/release-${GTEST_VERSION}.tar.gz")
 
