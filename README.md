@@ -2,7 +2,7 @@
 ==========
 
 This is a small and fast library whose only purpose in life is to compute the [SSIM](https://ece.uwaterloo.ca/~z70wang/research/ssim)
-(Structural Similarity) of two images. SSIM is intended more to closely model human perception than
+(Structural Similarity) of two images. SSIM is intended to more closely model human perception than
 [PSNR](https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio) (Peak Signal to Noise Ratio) does.
 
 
@@ -107,8 +107,8 @@ composite SSIM from per-channel SSIMs.
 Bit Depth Support
 -----------------
 Only 8-bit images are supported. However, it shouldn't be complicated to modify the code to support
-other bit depths: all that needs to be changed are the <code>[L](https://github.com/romigrou/ssim/blob/8d684ba783a74540a8b3be748e9fcf8368be509f/src/ssim.cpp#L894)</code>
-constant and the <code>[retrieve_tile()](https://github.com/romigrou/ssim/blob/8d684ba783a74540a8b3be748e9fcf8368be509f/src/ssim.cpp#L451)</code> function.
+other bit depths: all that needs to be changed are the <code>[L](https://github.com/romigrou/ssim/blob/286f8294a684c42837b031881ea95666049598cc/src/ssim.cpp#L891)</code>
+constant and the <code>[retrieve_tile()](https://github.com/romigrou/ssim/blob/286f8294a684c42837b031881ea95666049598cc/src/ssim.cpp#L448)</code> function.
 
 Building
 --------
