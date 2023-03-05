@@ -53,6 +53,7 @@ RMGR_WARNING_POP()
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 RMGR_WARNING_PUSH()
 RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
+RMGR_WARNING_CLANG_DISABLE("-Wmissing-field-initializers")
 #include "stb_image_write.h"
 RMGR_WARNING_POP()
 
