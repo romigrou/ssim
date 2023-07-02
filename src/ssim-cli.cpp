@@ -110,7 +110,8 @@ static float compute_ssim(const stbi_uc* img1, const stbi_uc* img2, int width, i
     assert(imgChannel < imgChannelCount);
     assert(map == NULL || mapChannel < mapChannelCount);
     assert(map != NULL || mapChannel == 0);
-    rmgr::ssim::Params params = {};
+    rmgr::ssim::Params params;
+    memset(&params, 0, sizeof(params));
     params.width      = width;
     params.height     = height;
     params.imgA.init_interleaved(img1, width*imgChannelCount, imgChannelCount, imgChannel);

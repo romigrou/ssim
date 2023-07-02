@@ -141,7 +141,6 @@ target_include_directories(rmgr-ssim
         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_FULL_INCLUDE_DIR}>"
 )
 
-#target_compile_features(rmgr-ssim PUBLIC cxx_std_11)
 target_compile_options(rmgr-ssim PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
 target_compile_definitions(rmgr-ssim PRIVATE ${RMGR_SSIM_DEFINITIONS} _USE_MATH_DEFINES)
 
@@ -227,6 +226,21 @@ if (RMGR_SSIM_BUILD_SAMPLE)
     endif()
 endif()
 
+
+###################################################################################################
+# C++ version
+
+set(RMGR_SSIM_CXX_VERSION) # Only meant for testing, leave empty
+if (RMGR_SSIM_CXX_VERSION)
+    foreach (target rmgr-ssim rmgr-ssim-cli rmgr-ssim-sample)
+        if (TARGET ${target})
+            set_target_properties(${target} PROPERTIES
+                CXX_STANDARD          ${RMGR_SSIM_CXX_VERSION}
+                CXX_STANDARD_REQUIRED TRUE
+            )
+        endif()
+    endforeach()
+endif()
 
 ###################################################################################################
 # Install rules

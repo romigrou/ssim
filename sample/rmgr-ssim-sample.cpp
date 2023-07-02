@@ -75,7 +75,8 @@ extern "C" int main(int argc, char* argv[])
     }
 
     // Compute SSIM of each channel
-    rmgr::ssim::Params params = {};
+    rmgr::ssim::Params params;
+    memset(&params, 0, sizeof(params));
     params.width  = img1Width;
     params.height = img1Height;
     for (int channelNum=0; channelNum < img1ChannelCount; ++channelNum)
