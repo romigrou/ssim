@@ -24,6 +24,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #if defined(__SIZEOF_FLOAT128__) && RMGR_COMPILER_IS_GCC
     #include <quadmath.h>
 #endif
