@@ -121,11 +121,35 @@ rather than `float` by setting the `RMGR_SSIM_USE_DOUBLE` option to `ON`.
 
 Otherwise, the code is mostly self-configurable and should therefore be easy to port to another build system.
 
+### Debian/Ubuntu
+Here's how to build the library:
+```
+sudo apt install build-essential g++ cmake
+make rmgr-ssim
+ls -l lib/linux-*gcc*/release/
+```
+
+### Windows
+You need [Visual Studio](https://visualstudio.microsoft.com) and [CMake](https://www.cmake.org).<br>
+Run the `GenSolution.cmd` script and follow the instructions.
+
 Command Line Tool
 -----------------
 
 A simple command line tool that computes the SSIM of two images is available. To build it, set the CMake variable
 `RMGR_SSIM_BUILD_CLI` to `ON`.
+
+### Debian/Ubuntu
+Here's how to build and run the command-line tool:
+```
+sudo apt install build-essential g++ cmake
+make rmgr-ssim-cli
+bin/linux-*gcc*/release/rmgr-ssim
+```
+
+### Windows
+You need [Visual Studio](https://visualstudio.microsoft.com) and [CMake](https://www.cmake.org).<br>
+Run the `GenSolution.cmd` script and follow the instructions.
 
 Sample Code
 -----------
@@ -133,6 +157,18 @@ Sample Code
 <code>[sample/rmgr-ssim-sample.cpp](sample/rmgr-ssim-sample.cpp)</code> is a simplified version of the aforementioned
 command line tool that showcases how to call `rmgr::ssim::compute_ssim()` in the most straightforward manner.
 For sample code of more advanced uses, please refer to [the unit tests](tests/rmgr-ssim-tests.cpp).
+
+### Debian/Ubuntu
+Here's how to build the command-line tool:
+```
+sudo apt install build-essential g++ cmake
+make rmgr-ssim-sample
+bin/linux-*gcc*/release/rmgr-ssim-sample
+```
+
+### Windows
+You need [Visual Studio](https://visualstudio.microsoft.com) and [CMake](https://www.cmake.org).<br>
+Run the `GenSolution.cmd` script and follow the instructions.
 
 Documentation
 -------------
