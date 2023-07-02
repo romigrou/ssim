@@ -39,7 +39,7 @@ GTEST_FILTER  ?= *
 CMAKE_OPTIONS := "-DRMGR_SSIM_BUILD_CLI=$(RMGR_SSIM_BUILD_CLI)" "-DRMGR_SSIM_BUILD_SAMPLE=$(RMGR_SSIM_BUILD_SAMPLE)" "-DRMGR_SSIM_BUILD_TESTS=$(RMGR_SSIM_BUILD_TESTS)" "-DRMGR_SSIM_NO_OPENMP=$(RMGR_SSIM_NO_OPENMP)" "-DRMGR_SSIM_USE_DOUBLE=$(RMGR_SSIM_USE_DOUBLE)"
 
 SOURCE_DIR    := $(HERE)
-CMAKE_TARGETS := rmgr-ssim-tests rmgr-ssim-sample rmgr-ssim-cli rmgr-ssim install package all
+CMAKE_TARGETS := rmgr-ssim-cli rmgr-ssim-tests rmgr-ssim-sample rmgr-ssim install package all
 CMAKELISTS    := $(SOURCE_DIR)/CMakeLists.txt
 BUILD_PATH     = build/$(BUILD_DIR)/$(MODE)
 
@@ -310,8 +310,8 @@ $(foreach target,$(CMAKE_TARGETS),$(eval $(call cmake_target,$(target))))
 
 # Hand-defined rules
 .PHONY: run-tests
-run-tests: $(firstword $(CMAKE_TARGETS))
-	$(subst build,bin,$(BUILD_PATH))/$(firstword $(CMAKE_TARGETS)) --gtest_filter=$(GTEST_FILTER)
+run-tests: rmgr-ssim-tests
+	$(subst build,bin,$(BUILD_PATH))/rmgr-ssim-tests --gtest_filter=$(GTEST_FILTER)
 
 .PHONY: clean
 clean: $(BUILD_PATH)/CMakeCache.txt
