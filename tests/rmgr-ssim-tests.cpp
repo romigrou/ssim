@@ -32,6 +32,7 @@
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
 RMGR_WARNING_PUSH()
+RMGR_WARNING_MSVC_DISABLE(4244) // conversion from 'type1' to 'type2', possible loss of data
 RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
 RMGR_WARNING_CLANG_DISABLE("-Wsign-compare")
 #include "../src/stb_image.h"

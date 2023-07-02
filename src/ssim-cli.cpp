@@ -44,6 +44,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_FAILURE_USERMSG
 RMGR_WARNING_PUSH()
+RMGR_WARNING_MSVC_DISABLE(4244) // conversion from 'type1' to 'type2', possible loss of data
 RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
 RMGR_WARNING_GCC_DISABLE("-Wunused-but-set-variable")
 #include "stb_image.h"
