@@ -182,7 +182,7 @@ Licensing
 
 This library is licensed under the zlib license, as follows:
 
-> Copyright © 2021, Romain Bailly
+> Copyright © 2023, Romain Bailly
 >
 > This software is provided 'as-is', without any express or implied
 > warranty.  In no event will the authors be held liable for any damages

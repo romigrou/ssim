@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Romain Bailly
+ * Copyright (c) 2023, Romain Bailly
  *
  * This software is provided 'as-is', without any express or implied
  * warranty. In no event will the authors be held liable for any damages
@@ -154,10 +154,17 @@ static int compute_ssims(const stbi_uc* img1, const stbi_uc* img2, int width, in
             return EXIT_FAILURE;
         }
 
+#if 1
+        // Constants from BT.601
+        const unsigned rRatio = 19595; // 0.299 * 65536
+        const unsigned gRatio = 38470; // 0.587 * 65536
+        const unsigned bRatio =  7471; // 0.114 * 65536
+#else
         // Constants from BT.709
         const unsigned rRatio = 13933; // 0.2126 * 65536
         const unsigned gRatio = 46871; // 0.7152 * 65536
         const unsigned bRatio =  4732; // 0.0722 * 65536
+#endif
 
         // Convert to luminance
         const unsigned pixelCount = width * height;
@@ -176,7 +183,7 @@ static int compute_ssims(const stbi_uc* img1, const stbi_uc* img2, int width, in
             *d1++ = static_cast<stbi_uc>((r1 * rRatio + g1 * gRatio + b1 * bRatio + 32768) / 65536);
             *d2++ = static_cast<stbi_uc>((r2 * rRatio + g2 * gRatio + b2 * bRatio + 32768) / 65536);
         }
-        
+
         float ssim = compute_ssim(lum1, lum2, width, height, 1, 0, map, mapChannelCount, 0);
         delete[] lum2;
         delete[] lum1;
@@ -342,7 +349,7 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
                         case MAP_FORMAT_PNG:
                             stbi_write_png_to_func(stbi__stdio_write, mapFile, width1, height1, mapChannelCount, map8, width1*mapChannelCount);
                             break;
-                        case MAP_FORMAT_PFM:       
+                        case MAP_FORMAT_PFM:
                             {
 #if RMGR_ARCH_IS_LITTLE_ENDIAN
                                 #define PFM_ENDIANNESS  "-1.0"
@@ -353,7 +360,7 @@ extern "C" int _tmain(int argc, TCHAR* argv[])
 #endif
                                 fprintf(mapFile, "P%c\n%d %d\n" PFM_ENDIANNESS "\n", (mapChannelCount==1)?'f':'F', width1, height1);
                                 const size_t mapStride = width1 * mapChannelCount;
-                                for (int y = height1; --y >= 0;) 
+                                for (int y = height1; --y >= 0;)
                                 {
                                     if (fwrite(map+y*mapStride, sizeof(float), mapStride, mapFile) != mapStride)
                                     {
