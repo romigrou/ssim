@@ -9,6 +9,26 @@
 	"configurePresets":
 	[
 		{
+			"name": "windows",
+			"hidden": true,
+			"condition":
+			{
+				"lhs":  "${hostSystemName}",
+				"type": "equals",
+				"rhs":  "Windows"
+			}
+		},
+		{
+			"name": "not-windows",
+			"hidden": true,
+			"condition":
+			{
+				"lhs":  "${hostSystemName}",
+				"type": "notEquals",
+				"rhs":  "Windows"
+			}
+		},
+		{
 			"name":        "gcc",
 			"hidden":      true,
 			"environment": {"CC":"gcc", "CXX":"g++"}
@@ -17,22 +37,6 @@
 			"name":        "clang",
 			"hidden":      true,
 			"environment": {"CC":"clang", "CXX": "clang++"}
-		},
-		{
-			"name":      "ninja",
-			"hidden":    true,
-			"generator": "Ninja Multi-Config",
-			"binaryDir": "${sourceDir}/build/${hostSystemName}-native-${presetName}"
-		},
-		{
-			"name":      "output-paths",
-			"hidden": true,
-			"cacheVariables":
-			{
-				"CMAKE_ARCHIVE_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/lib/${hostSystemName}-native-${presetName}"},
-				"CMAKE_LIBRARY_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/${hostSystemName}-native-${presetName}"},
-				"CMAKE_RUNTIME_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/${hostSystemName}-native-${presetName}"}
-			}
 		},
 		{
 			"name":   "all-exes",
@@ -44,27 +48,91 @@
 				"RMGR_SSIM_BUILD_TESTS":  true
 			}
 		},
-
-
 		{
-			"name": "gcc-ninja",
-			"inherits": ["gcc", "ninja", "output-paths", "all-exes"]
+			"name":      "ninja",
+			"hidden":    true,
+			"generator": "Ninja Multi-Config",
+			"inherits":  ["not-windows", "all-exes"],
+			"binaryDir": "${sourceDir}/build/${hostSystemName}-native-${presetName}",
+			"cacheVariables":
+			{
+				"CMAKE_ARCHIVE_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/lib/${hostSystemName}-native-${presetName}"},
+				"CMAKE_LIBRARY_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/${hostSystemName}-native-${presetName}"},
+				"CMAKE_RUNTIME_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/${hostSystemName}-native-${presetName}"}
+			}
 		},
 		{
-			"name": "clang-ninja",
-			"inherits": ["clang", "ninja", "output-paths", "all-exes"]
-		}
+			"name":      "vs",
+			"hidden":    true,
+			"binaryDir": "${sourceDir}/build/windows-${presetName}",
+			"inherits":  ["windows", "all-exes"],
+			"cacheVariables":
+			{
+				"CMAKE_ARCHIVE_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/lib/windows-${presetName}"},
+				"CMAKE_LIBRARY_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/windows-${presetName}"},
+				"CMAKE_RUNTIME_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/windows-${presetName}"},
+				"CMAKE_INSTALL_PREFIX":           {"type":"PATH", "value":"${sourceDir}/package/windows-${presetName}"},
+				"CPACK_PACKAGE_DIRECTORY":        {"type":"PATH", "value":"${sourceDir}/package/windows-${presetName}"}
+			}
+		},
+		{
+			"name":      "vs2022",
+			"hidden":    true,
+			"generator": "Visual Studio 17 2022",
+			"inherits":  ["vs"]
+		},
+		{
+			"name":      "vs2022-clang",
+			"hidden":    true,
+			"toolset":   "ClangCL",
+			"inherits":  ["vs2022"]
+		},
+		{
+			"name":         "vs-x86",
+			"hidden":       true,
+			"architecture": "Win32"
+		},
+		{
+			"name":         "vs-amd64",
+			"hidden":       true,
+			"architecture": "x64"
+		},
+		{
+			"name":         "vs-arm",
+			"hidden":       true,
+			"architecture": "ARM"
+		},
+		{
+			"name":         "vs-aarch64",
+			"hidden":       true,
+			"architecture": "ARM64"
+		},
+
+		{"name":"ninja-gcc",               "displayName": "Ninja w/ GCC",           "inherits":["ninja", "gcc"]},
+		{"name":"ninja-clang",             "displayName": "Ninja w/ Clang",         "inherits":["ninja", "clang"]},
+
+		{"name":"x86-msvc19.3-vs2022",     "displayName": "VS2022 x86",             "inherits":["vs2022",       "vs-x86"]},
+		{"name":"x86-clangcl-vs2022",      "displayName": "VS2022 x86 (Clang)",     "inherits":["vs2022-clang", "vs-x86"]},
+		{"name":"amd64-msvc19.3-vs2022",   "displayName": "VS2022 AMD64",           "inherits":["vs2022",       "vs-amd64"]},
+		{"name":"amd64-clangcl-vs2022",    "displayName": "VS2022 AMD64 (Clang)",   "inherits":["vs2022-clang", "vs-amd64"]},
+		{"name":"arm-msvc19.3-vs2022",     "displayName": "VS2022 ARM",             "inherits":["vs2022",       "vs-arm"]},
+		{"name":"aarch64-msvc19.3-vs2022", "displayName": "VS2022 AArch64",         "inherits":["vs2022",       "vs-aarch64"]},
+		{"name":"aarch64-clang-vs2022",    "displayName": "VS2022 AArch64 (Clang)", "inherits":["vs2022-clang", "vs-aarch64"]}
 	],
 	"buildPresets":
 	[
 		{
-			"name":    "targets",
+			"name":    "all-exe-targets",
 			"hidden":  true,
 			"targets": ["rmgr-ssim-tests", "rmgr-ssim-cli", "rmgr-ssim-sample"]
 		},
 
-		{"name":"gcc-ninja-debug",          "displayName":"Debug",          "configuration":"Debug",          "configurePreset":"gcc-ninja", "inherits":"targets"},
-		{"name":"gcc-ninja-relwithdebinfo", "displayName":"RelWithDebInfo", "configuration":"RelWithDebInfo", "configurePreset":"gcc-ninja", "inherits":"targets"},
-		{"name":"gcc-ninja-release",        "displayName":"Release",        "configuration":"Release",        "configurePreset":"gcc-ninja", "inherits":"targets"}
+		{"name":"ninja-gcc-debug",            "displayName":"Debug",          "configuration":"Debug",          "configurePreset":"ninja-gcc",   "inherits":"all-exe-targets"},
+		{"name":"ninja-gcc-relwithdebinfo",   "displayName":"RelWithDebInfo", "configuration":"RelWithDebInfo", "configurePreset":"ninja-gcc",   "inherits":"all-exe-targets"},
+		{"name":"ninja-gcc-release",          "displayName":"Release",        "configuration":"Release",        "configurePreset":"ninja-gcc",   "inherits":"all-exe-targets"},
+
+		{"name":"ninja-clang-debug",          "displayName":"Debug",          "configuration":"Debug",          "configurePreset":"ninja-clang", "inherits":"all-exe-targets"},
+		{"name":"ninja-clang-relwithdebinfo", "displayName":"RelWithDebInfo", "configuration":"RelWithDebInfo", "configurePreset":"ninja-clang", "inherits":"all-exe-targets"},
+		{"name":"ninja-clang-release",        "displayName":"Release",        "configuration":"Release",        "configurePreset":"ninja-clang", "inherits":"all-exe-targets"}
 	]
 }
