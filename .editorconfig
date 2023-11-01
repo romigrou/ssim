@@ -15,5 +15,8 @@ indent_style = tab
 [*.natvis]
 indent_style = tab
 
+[*.json]
+indent_style = tab
+
 [*.in]
 trim_trailing_whitespace = false

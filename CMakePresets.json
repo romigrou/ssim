@@ -1,0 +1,70 @@
+{
+	"version": 3,
+	"cmakeMinimumRequired":
+	{
+		"major": 3,
+		"minor": 21,
+		"patch": 0
+	},
+	"configurePresets":
+	[
+		{
+			"name":        "gcc",
+			"hidden":      true,
+			"environment": {"CC":"gcc", "CXX":"g++"}
+		},
+		{
+			"name":        "clang",
+			"hidden":      true,
+			"environment": {"CC":"clang", "CXX": "clang++"}
+		},
+		{
+			"name":      "ninja",
+			"hidden":    true,
+			"generator": "Ninja Multi-Config",
+			"binaryDir": "${sourceDir}/build/${hostSystemName}-native-${presetName}"
+		},
+		{
+			"name":      "output-paths",
+			"hidden": true,
+			"cacheVariables":
+			{
+				"CMAKE_ARCHIVE_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/lib/${hostSystemName}-native-${presetName}"},
+				"CMAKE_LIBRARY_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/${hostSystemName}-native-${presetName}"},
+				"CMAKE_RUNTIME_OUTPUT_DIRECTORY": {"type":"PATH", "value":"${sourceDir}/bin/${hostSystemName}-native-${presetName}"}
+			}
+		},
+		{
+			"name":   "all-exes",
+			"hidden": true,
+			"cacheVariables":
+			{
+				"RMGR_SSIM_BUILD_CLI":    true,
+				"RMGR_SSIM_BUILD_SAMPLE": true,
+				"RMGR_SSIM_BUILD_TESTS":  true
+			}
+		},
+
+
+		{
+			"name": "gcc-ninja",
+			"inherits": ["gcc", "ninja", "output-paths", "all-exes"]
+		},
+		{
+			"name": "clang-ninja",
+			"inherits": ["clang", "ninja", "output-paths", "all-exes"]
+		}
+	],
+	"buildPresets":
+	[
+		{
+			"name":    "targets",
+			"hidden":  true,
+			"targets": ["rmgr-ssim-tests", "rmgr-ssim-cli", "rmgr-ssim-sample"]
+		},
+
+		{"name":"gcc-ninja-debug",          "displayName":"Debug",          "configuration":"Debug",          "configurePreset":"gcc-ninja", "inherits":"targets"},
+		{"name":"gcc-ninja-relwithdebinfo", "displayName":"RelWithDebInfo", "configuration":"RelWithDebInfo", "configurePreset":"gcc-ninja", "inherits":"targets"},
+		{"name":"gcc-ninja-release",        "displayName":"Release",        "configuration":"Release",        "configurePreset":"gcc-ninja", "inherits":"targets"}
+	]
+}
