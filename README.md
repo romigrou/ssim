@@ -114,7 +114,7 @@ Building
 --------
 
 The library relies on [CMake](https://cmake.org/) to build. SIMD intrinsics will be used whenever possible
-and [OpenMP](https://www.openmp.org/) can be enabled by turning on a simple option (`RMGR_SIMD_USE_OPENMP`).
+and [OpenMP](https://www.openmp.org/) can be enabled by turning on a simple option (`RMGR_SSIM_USE_OPENMP`).
 
 As mentioned above, for improved precision, you can have the library perform all the computations using `double`
 rather than `float` by setting the `RMGR_SSIM_USE_DOUBLE` option to `ON`.
