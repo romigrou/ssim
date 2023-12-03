@@ -83,7 +83,7 @@ But be aware that this will basically make the library run half as fast.
 
 The following table gives the maximum errors of global and per-pixel SSIMs depending on whether the library
 was built with single or double internal precision. Those errors are relative to a fully quad-precision (128-bit)
-reference implementation. As you can see, the double precision is almost as precise as the `float` API allows;
+reference implementation. As you can see, the double precision is almost as precise as the `float` API allows.
 The single precision version should nonetheless be precise enough for most applications.
 
 |                  | Average<br>Global Error | Maximum<br>Global Error | Average<br>Per-Pixel Error | Maximum<br>Per-Pixel Error |
@@ -114,7 +114,7 @@ Building
 --------
 
 The library relies on [CMake](https://cmake.org/) to build. SIMD intrinsics will be used whenever possible
-and [OpenMP](https://www.openmp.org/) can be enabled by turning on a simple option (`RMGR_SIMD_USE_OPENMP`).
+and [OpenMP](https://www.openmp.org/) can be enabled by turning on a simple option (`RMGR_SSIM_USE_OPENMP`).
 
 As mentioned above, for improved precision, you can have the library perform all the computations using `double`
 rather than `float` by setting the `RMGR_SSIM_USE_DOUBLE` option to `ON`.
