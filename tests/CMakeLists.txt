@@ -73,7 +73,7 @@ else()
         set(GTEST_URL     "https://github.com/google/googletest/archive/release-${GTEST_VERSION}.tar.gz")
 
         if (NOT EXISTS "${GTEST_DIR}")
-            rmgr_download_and_extract("${GTEST_URL}" "${GTEST_DIR}.tag.gz" FALSE)
+            rmgr_download_and_extract("${GTEST_URL}" "${GTEST_DIR}.tar.gz" FALSE)
         endif()
 
         if (MSVC)
