@@ -62,11 +62,19 @@
         {
             __cpuid(regs, leaf);
         }
+        static inline void cpu_id(int leaf, int subLeaf, int regs[4]) RMGR_NOEXCEPT
+        {
+            __cpuidex(regs, leaf, subLeaf);
+        }
     #elif RMGR_COMPILER_IS_GCC_OR_CLANG
         #include <cpuid.h>
         static inline void cpu_id(int leaf, int regs[4]) RMGR_NOEXCEPT
         {
             __get_cpuid(leaf, reinterpret_cast<unsigned*>(regs), reinterpret_cast<unsigned*>(regs+1), reinterpret_cast<unsigned*>(regs+2), reinterpret_cast<unsigned*>(regs+3));
+        }
+        static inline void cpu_id(int leaf, int subLeaf, int regs[4]) RMGR_NOEXCEPT
+        {
+            __get_cpuid_count(leaf, subLeaf, reinterpret_cast<unsigned*>(regs), reinterpret_cast<unsigned*>(regs+1), reinterpret_cast<unsigned*>(regs+2), reinterpret_cast<unsigned*>(regs+3));
         }
     #else
         #error Unsupported compiler
@@ -765,7 +773,7 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
     }
     if (maxLeaf >= 7)
     {
-        cpu_id(7, regs);
+        cpu_id(7, 0, regs);
         const uint32_t ebx = regs[1];
 
         supportedImpls |= (((ebx >> 16) & 1) && avx512::g_gaussianBlurFct!=NULL) ? (1 << IMPL_AVX512) : 0;
