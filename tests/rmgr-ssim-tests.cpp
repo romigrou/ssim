@@ -44,6 +44,14 @@ RMGR_WARNING_POP()
 #endif
 
 
+// We use the old API because this tests both the old and the new API
+// (the old one is implemented using the new one).
+// However, the deprecation warnings are annoying.
+RMGR_WARNING_CLANG_DISABLE("-Wdeprecated-declarations")
+RMGR_WARNING_GCC_DISABLE("-Wdeprecated-declarations")
+RMGR_WARNING_MSVC_DISABLE(4996) 
+
+
 const unsigned IMPL_COUNT = 8;
 
 
