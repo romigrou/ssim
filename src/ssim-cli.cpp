@@ -105,12 +105,12 @@ static stbi_uc* load_img(const TCHAR* path, int* width, int* height, int* channe
 }
 
 
-static float compute_ssim(const stbi_uc* img1, const stbi_uc* img2, int width, int height, int imgChannelCount, int imgChannel, float* map, int mapChannelCount, int mapChannel)
+static int32_t compute_ssim(float* ssim, const stbi_uc* img1, const stbi_uc* img2, int width, int height, int imgChannelCount, int imgChannel, float* map, int mapChannelCount, int mapChannel)
 {
     assert(imgChannel < imgChannelCount);
     assert(map == NULL || mapChannel < mapChannelCount);
     assert(map != NULL || mapChannel == 0);
-    rmgr::ssim::Params params;
+    rmgr::ssim::GeneralParams params;
     memset(&params, 0, sizeof(params));
     params.width      = width;
     params.height     = height;
@@ -120,9 +120,9 @@ static float compute_ssim(const stbi_uc* img1, const stbi_uc* img2, int width, i
     params.ssimStep   = mapChannelCount;
     params.ssimStride = width * mapChannelCount;
 #if RMGR_SSIM_USE_OPENMP
-    return rmgr::ssim::compute_ssim_openmp(params);
+    return rmgr::ssim::compute_ssim_openmp(ssim, params);
 #else
-    return rmgr::ssim::compute_ssim(params);
+    return rmgr::ssim::compute_ssim(ssim, params);
 #endif
 }
 
@@ -135,8 +135,9 @@ static int compute_ssims(const stbi_uc* img1, const stbi_uc* img2, int width, in
     if (onlyChannel >= 0)
     {
         assert(map == NULL || mapChannelCount == 1);
-        float ssim = compute_ssim(img1, img2, width, height, channelCount, onlyChannel, map, mapChannelCount, 0);
-        if (rmgr::ssim::get_errno(ssim) != 0)
+        float ssim;
+        const int32_t result = compute_ssim(&ssim, img1, img2, width, height, channelCount, onlyChannel, map, mapChannelCount, 0);
+        if (result != 0)
             return EXIT_FAILURE;
         printf("% 7.4f\n", ssim);
     }
@@ -184,11 +185,12 @@ static int compute_ssims(const stbi_uc* img1, const stbi_uc* img2, int width, in
             *d2++ = static_cast<stbi_uc>((r2 * rRatio + g2 * gRatio + b2 * bRatio + 32768) / 65536);
         }
 
-        float ssim = compute_ssim(lum1, lum2, width, height, 1, 0, map, mapChannelCount, 0);
+        float ssim;
+        const int32_t result = compute_ssim(&ssim, lum1, lum2, width, height, 1, 0, map, mapChannelCount, 0);
         delete[] lum2;
         delete[] lum1;
 
-        if (rmgr::ssim::get_errno(ssim) != 0)
+        if (result != 0)
             return EXIT_FAILURE;
         printf("% 7.4f\n", ssim);
     }
@@ -197,8 +199,9 @@ static int compute_ssims(const stbi_uc* img1, const stbi_uc* img2, int width, in
         float average = 0.0f;
         for (int c=0; c<channelCount; ++c)
         {
-            float ssim = compute_ssim(img1, img2, width, height, channelCount, c, map, mapChannelCount, (map!=NULL)?c: 0);
-            if (rmgr::ssim::get_errno(ssim) != 0)
+            float ssim;
+            const int32_t result = compute_ssim(&ssim, img1, img2, width, height, channelCount, c, map, mapChannelCount, (map!=NULL)?c:0);
+            if (result != 0)
                 return EXIT_FAILURE;
             printf("Channel %u: % 7.4f\n", c, ssim);
             average += ssim;
