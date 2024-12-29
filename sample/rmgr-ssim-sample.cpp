@@ -75,20 +75,26 @@ extern "C" int main(int argc, char* argv[])
     }
 
     // Compute SSIM of each channel
-    rmgr::ssim::Params params;
+    rmgr::ssim::GeneralParams params;
     memset(&params, 0, sizeof(params));
     params.width  = img1Width;
     params.height = img1Height;
     for (int channelNum=0; channelNum < img1ChannelCount; ++channelNum)
     {
-        params.imgA.init_interleaved(img1, img1Width*img1ChannelCount, channelNum, img1ChannelCount);
-        params.imgB.init_interleaved(img2, img2Width*img2ChannelCount, channelNum, img2ChannelCount);
+        const int32_t resultA = params.imgA.init_interleaved(img1, img1Width*img1ChannelCount, img1ChannelCount, channelNum);
+        const int32_t resultB = params.imgB.init_interleaved(img2, img2Width*img2ChannelCount, img2ChannelCount, channelNum);
+        if (resultA != 0 || resultB != 0)
+        {
+            fprintf(stderr, "Failed to initialize the parameters for channel %d\n", channelNum+1);
+            continue;
+        }
+        float ssim = 0;
 #if RMGR_SSIM_USE_OPENMP
-        const float ssim = rmgr::ssim::compute_ssim_openmp(params);
+        const int32_t result = rmgr::ssim::compute_ssim_openmp(&ssim, params);
 #else
-        const float ssim = rmgr::ssim::compute_ssim(params);
+        const int32_t result = rmgr::ssim::compute_ssim(&ssim, params, NULL);
 #endif
-        if (rmgr::ssim::get_errno(ssim) != 0)
+        if (result != 0)
             fprintf(stderr, "Failed to compute SSIM of channel %d\n", channelNum+1);
         else
             printf("SSIM of channel %d:% 7.4f\n", channelNum+1, ssim);
