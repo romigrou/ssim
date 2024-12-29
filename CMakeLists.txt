@@ -240,7 +240,7 @@ endif()
 # stb_image
 
 if (RMGR_SSIM_BUILD_CLI OR RMGR_SSIM_BUILD_TESTS OR RMGR_SSIM_BUILD_SAMPLE)
-    set(STB_HASH   "5736b15f7ea0ffb08dd38af21067c314d6a3aae9")
+    set(STB_HASH   "5c205738c191bcb0abc65c4febfa9bd25ff35234")
     set(STBI_URL   "https://raw.githubusercontent.com/nothings/stb/${STB_HASH}/stb_image.h")
     set(STBIW_URL  "https://raw.githubusercontent.com/nothings/stb/${STB_HASH}/stb_image_write.h")
     set(STBI_PATH  "${CMAKE_CURRENT_SOURCE_DIR}/src/stb_image.h")
