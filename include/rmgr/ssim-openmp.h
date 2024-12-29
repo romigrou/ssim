@@ -25,8 +25,59 @@
 #include <rmgr/ssim.h>
 
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+
+/**
+ * @brief Computes in multi-thread the SSIM of a single channel of two images and, optionally, the per-pixel SSIM map
+ *
+ * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the
+ *       `step` and `stride` (as well as the `width` and `height`) parameters if this improves cache
+ *       hit rates. As long as both images are traversed in the same order.
+ *
+ * @param [out] ssim   A pointer to a variable to receive the global SSIM.
+ *                     This can be `NULL` if you do not need it.
+ * @param [in]  params The set of non-thread related parameters. This cannot be `NULL`.
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL At least of the parameters was invalid
+ * @retval ENOMEM A memory allocation failed
+ * @retval ECHILD An error occurred in one the threads of the thread pool
+ */
+rmgr_int32_t rmgr_ssim_compute_ssim_openmp(float* ssim, const rmgr_ssim_Params* params) RMGR_NOEXCEPT;
+
+
+#ifdef __cplusplus
+} // extern "C"
+
+
 namespace rmgr { namespace ssim
 {
+
+
+/**
+ * @brief Computes in multi-thread the SSIM of a single channel of two images and, optionally, the per-pixel SSIM map
+ *
+ * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the
+ *       `step` and `stride` (as well as the `width` and `height`) parameters if this improves cache
+ *       hit rates. As long as both images are traversed in the same order.
+ *
+ * @param [out] ssim   A pointer to a variable to receive the global SSIM.
+ *                     This can be `NULL` if you do not need it.
+ * @param [in]  params The set of non-thread related parameters.
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL At least of the parameters was invalid
+ * @retval ENOMEM A memory allocation failed
+ * @retval ECHILD An error occurred in one the threads of the thread pool
+ */
+int32_t compute_ssim_openmp(float* ssim, const GeneralParams& params) RMGR_NOEXCEPT
+{
+    return ::rmgr_ssim_compute_ssim_openmp(ssim, &params);
+}
 
 
 /**
@@ -43,9 +94,17 @@ namespace rmgr { namespace ssim
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
  */
-float compute_ssim_openmp(const UnthreadedParams& params) RMGR_NOEXCEPT;
+RMGR_DEPRECATED_MSG("Use compute_ssim_openmp(float* ssim, const GeneralParams& params) instead")
+inline float compute_ssim_openmp(const UnthreadedParams& params) RMGR_NOEXCEPT
+{
+    float ssim;
+    const int32_t result = compute_ssim_openmp(&ssim, params);
+    return (result == 0) ? ssim : float(-result);
+}
 
 
 }} // namespace rmgr::ssim
+#endif // _cplusplus
+
 
 #endif // RMGR_SSIM_H

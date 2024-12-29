@@ -22,8 +22,7 @@
 #define RMGR_SSIM_H
 
 
-#include <cassert>
-#include <cstddef>
+#include <stddef.h>
 
 
 //=================================================================================================
@@ -64,6 +63,12 @@
     #ifndef RMGR_ALIGNED_VAR
         #define RMGR_ALIGNED_VAR(alignment, type, name)  type name __attribute__((aligned(alignment)))
     #endif
+    #ifndef RMGR_DEPRECATED
+        #define RMGR_DEPRECATED                          __attribute__((deprecated))
+    #endif
+    #ifndef RMGR_DEPRECATED_MSG
+        #define RMGR_DEPRECATED_MSG(msg)                 __attribute__((deprecated(msg)))
+    #endif
 
 #elif defined(_MSC_VER)
     #ifndef RMGR_COMPILER_IS_MSVC
@@ -89,6 +94,12 @@
     #endif
     #ifndef RMGR_ALIGNED_VAR
         #define RMGR_ALIGNED_VAR(alignment, type, name)  __declspec(align(alignment)) type name
+    #endif
+    #ifndef RMGR_DEPRECATED
+        #define RMGR_DEPRECATED                          __declspec(deprecated)
+    #endif
+    #ifndef RMGR_DEPRECATED_MSG
+        #define RMGR_DEPRECATED_MSG(msg)                 __declspec(deprecated(msg))
     #endif
 
 #elif defined(__GNUC__)
@@ -116,6 +127,12 @@
     #endif
     #ifndef RMGR_ALIGNED_VAR
         #define RMGR_ALIGNED_VAR(alignment, type, name)  type name __attribute__((aligned(alignment)))
+    #endif
+    #ifndef RMGR_DEPRECATED
+        #define RMGR_DEPRECATED                          __attribute__((deprecated))
+    #endif
+    #ifndef RMGR_DEPRECATED_MSG
+        #define RMGR_DEPRECATED_MSG(msg)                 __attribute__((deprecated(msg)))
     #endif
 #endif
 
@@ -173,6 +190,12 @@
 #endif
 #ifndef RMGR_WARNING_CLANG_DISABLE
     #define RMGR_WARNING_CLANG_DISABLE(name)
+#endif
+#ifndef RMGR_DEPRECATED
+    #define RMGR_DEPRECATED
+#endif
+#ifndef RMGR_DEPRECATED_MSG
+    #define RMGR_DEPRECATED_MSG(msg)
 #endif
 
 
@@ -297,14 +320,17 @@
     #error Architecture cannot be both little and big endian
 #endif
 
+
 //=================================================================================================
 // C++ version
 
 #ifndef RMGR_CPP_VERSION
     #ifdef _MSVC_LANG
         #define RMGR_CPP_VERSION  _MSVC_LANG
-    #else
+    #elif defined(__cplusplus)
         #define RMGR_CPP_VERSION  __cplusplus
+    #else
+        #define RMGR_CPP_VERSION  0
     #endif
 #endif
 
@@ -383,33 +409,34 @@
 // Workaround for MSVC prior to 2010 lacking stdint.h
 #if !RMGR_COMPILER_IS_DOXYGEN
 #if RMGR_COMPILER_IS_MSVC_LESS_THAN(16,0,0)
-namespace rmgr { namespace ssim
-{
-    typedef unsigned __int8  uint8_t;
-    typedef signed   __int32 int32_t;
-    typedef unsigned __int32 uint32_t;
-    typedef unsigned __int64 uint64_t;
-    const uint8_t UINT8_MAX = 255;
-}}
+    typedef unsigned __int8  rmgr_uint8_t;
+    typedef signed   __int32 rmgr_int32_t;
+    typedef unsigned __int32 rmgr_uint32_t;
+    typedef unsigned __int64 rmgr_uint64_t;
+    #define RMGR_UINT8_MAX  255
 #else
-#include <stdint.h>
-namespace rmgr { namespace ssim
-{
-    typedef ::uint8_t  uint8_t;
-    typedef ::int32_t  int32_t;
-    typedef ::uint32_t uint32_t;
-    typedef ::uint64_t uint64_t;
-}}
+    #include <stdint.h>
+    typedef uint8_t  rmgr_uint8_t;
+    typedef int32_t  rmgr_int32_t;
+    typedef uint32_t rmgr_uint32_t;
+    typedef uint64_t rmgr_uint64_t;
+    #define RMGR_UINT8_MAX  UINT8_MAX
 #endif
 #endif
 
 
-namespace rmgr { namespace ssim
+//=================================================================================================
+// C API
+
+
+#ifdef __cplusplus
+extern "C"
 {
+#endif
 
 
-typedef void* (*AllocFct)(size_t size, size_t alignment) RMGR_NOEXCEPT_TYPEDEF;
-typedef void  (*DeallocFct)(void* address) RMGR_NOEXCEPT_TYPEDEF;
+typedef void* (*rmgr_ssim_AllocFct)(size_t size, size_t alignment) RMGR_NOEXCEPT_TYPEDEF;
+typedef void  (*rmgr_ssim_DeallocFct)(void* address) RMGR_NOEXCEPT_TYPEDEF;
 
 
 /**
@@ -418,7 +445,7 @@ typedef void  (*DeallocFct)(void* address) RMGR_NOEXCEPT_TYPEDEF;
  * @param [in] arg    The per-thread argument as passed to the thread pool
  * @param [in] jobNum The current job's number. Must be < `jobCount` as passed to `ThreadPoolFct`.
  */
-typedef void (*ThreadFct)(void* arg, unsigned jobNum) RMGR_NOEXCEPT_TYPEDEF;
+typedef void (*rmgr_ssim_ThreadFct)(void* arg, rmgr_uint32_t jobNum) RMGR_NOEXCEPT_TYPEDEF;
 
 
 /**
@@ -433,10 +460,10 @@ typedef void (*ThreadFct)(void* arg, unsigned jobNum) RMGR_NOEXCEPT_TYPEDEF;
  * @param [in] context     The value passed in to `compute_ssim` as `threadPoolContext`.
  *                         This is a user-defined value that can contain whatever.
  *
- * @retval 0     All went fine
+ * @retval 0     Everything went fine
  * @retval Other An error occurred
  */
-typedef int (*ThreadPoolFct)(void* context, ThreadFct fct, void* const args[], unsigned threadCount, unsigned jobCount) RMGR_NOEXCEPT_TYPEDEF;
+typedef rmgr_int32_t (*rmgr_ssim_ThreadPoolFct)(void* context, rmgr_ssim_ThreadFct fct, void* const args[], rmgr_uint32_t threadCount, rmgr_uint32_t jobCount) RMGR_NOEXCEPT_TYPEDEF;
 
 
 /**
@@ -450,89 +477,198 @@ typedef int (*ThreadPoolFct)(void* context, ThreadFct fct, void* const args[], u
  * Convenience functions to initialize the parameters for the two most common schemes are provided,
  * but you can (and should) bypass them if you need more flexibility.
  */
-struct ImgParams
+typedef struct rmgr_ssim_ImgParams_
 {
-    const uint8_t* topLeft; ///< Pointer to the considered channel of the image's top-left pixel
-    ptrdiff_t      step;    ///< The distance (in bytes) between a pixel and the one immediately to its right
-    ptrdiff_t      stride;  ///< The distance (in bytes) between a pixel and the one immediately below it
+    const rmgr_uint8_t* topLeft; ///< Pointer to the considered channel of the image's top-left pixel
+    ptrdiff_t           step;    ///< The distance (in bytes) between a pixel and the one immediately to its right
+    ptrdiff_t           stride;  ///< The distance (in bytes) between a pixel and the one immediately below it
 
-    /**
-     * @brief Sets the parameters for an interleaved image
-     *
-     * @param [in] data         Pointer to the image's top-left pixel
-     * @param [in] imgStride    The distance (in bytes) between a pixel and the one immediately below it.
-     *                          This is negative for bottom-up images.
-     * @param [in] channelNum   The channel whose SSIM is to be computed
-     * @param [in] channelCount How many channels the image contains
-     */
-    void init_interleaved(const uint8_t* data, ptrdiff_t imgStride, unsigned channelCount, unsigned channelNum) RMGR_NOEXCEPT
-    {
-        assert(data != NULL);
-        assert(channelNum < channelCount);
-        topLeft = data + channelNum;
-        step    = channelCount;
-        stride  = imgStride;
-    }
-
-    /**
-     * @brief Sets the parameters for a planar image (assuming one channel per plane)
-     *
-     * @param [in] planes   For each plane, a pointer to its top-left pixel
-     * @param [in] strides  For each plane, the distance (in bytes) between a pixel and the one immediately below it.
-     *                      This is negative for bottom-up images.
-     * @param [in] planeNum The channel whose SSIM is to be computed
-     */
-    void init_planar(uint8_t const* const planes[], const ptrdiff_t strides[], unsigned planeNum) RMGR_NOEXCEPT
-    {
-        assert(planes != NULL && planes[planeNum] != NULL);
-        assert(strides != NULL);
-        topLeft = planes[planeNum];
-        step    = 1;
-        stride  = strides[planeNum];
-    }
-};
+#ifdef __cplusplus
+    void init_interleaved(const rmgr_uint8_t* data, ptrdiff_t imgStride, rmgr_uint32_t channelCount, rmgr_uint32_t channelNum) RMGR_NOEXCEPT;
+    void init_planar(rmgr_uint8_t const* const planes[], const ptrdiff_t strides[], rmgr_uint32_t planeNum) RMGR_NOEXCEPT;
+#endif
+} rmgr_ssim_ImgParams;
 
 
 /**
  * @brief Set of parameters, except those related to threading
  */
-struct UnthreadedParams
+typedef struct rmgr_ssim_Params_
 {
     // Input
-    uint32_t       width;      ///< The images' width,  in pixels
-    uint32_t       height;     ///< The images' height, in pixels
-    ImgParams      imgA;       ///< The first  image's parameters
-    ImgParams      imgB;       ///< The second image's parameters
+    rmgr_uint32_t        width;      ///< The images' width,  in pixels
+    rmgr_uint32_t        height;     ///< The images' height, in pixels
+    rmgr_ssim_ImgParams  imgA;       ///< The first  image's parameters
+    rmgr_ssim_ImgParams  imgB;       ///< The second image's parameters
 
     // SSIM map
-    float*         ssimMap;    ///< A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need a map
-    ptrdiff_t      ssimStep;   ///< The distance (in number of `float`) between a pixel and the one immediately to its right
-    ptrdiff_t      ssimStride; ///< The distance (in number of `float`) between a pixel and the one immediately below it (negative for bottom-up)
+    float*               ssimMap;    ///< A pointer to the top-left pixel the SSIM map. You can set this to `NULL` if you don't need a map
+    ptrdiff_t            ssimStep;   ///< The distance (in number of `float`) between a pixel and the one immediately to its right
+    ptrdiff_t            ssimStride; ///< The distance (in number of `float`) between a pixel and the one immediately below it (negative for bottom-up)
 
     // Allocation
-    AllocFct       alloc;      ///< The allocation function. If `NULL`, stack storage is used.
-    DeallocFct     dealloc;    ///< The deallocation function. Ignored if `alloc` is `NULL`.
+    rmgr_ssim_AllocFct   alloc;      ///< The allocation function. If `NULL`, stack storage is used.
+    rmgr_ssim_DeallocFct dealloc;    ///< The deallocation function. Ignored if `alloc` is `NULL`.
 
-    /**
-     * @brief Sets the allocation functions to use `malloc()` and `free()`
-     */
+#ifdef __cplusplus
     void use_default_allocator() RMGR_NOEXCEPT;
-};
+#endif
+} rmgr_ssim_Params;
+
+
+typedef struct rmgr_ssim_ThreadPool_
+{
+    rmgr_ssim_ThreadPoolFct dispatch;    ///< A function that dispatches jobs on a thread pool. If `NULL` the processing is done in  single-thread mode.
+    void*                   context;     ///< A user-defined value that will be passed as-is to the thread pool. Ignored if `threadPool` is `NULL`.
+    rmgr_uint32_t           threadCount; ///< How many threads are present in the thread pool. Ignored if `threadPool` is `NULL`.
+} rmgr_ssim_ThreadPool;
+
+
+/**
+ * @brief Sets the parameters for an interleaved image
+ *
+ * @param [out] params       The parameter structure to initialize
+ * @param [in]  data         Pointer to the image's top-left pixel
+ * @param [in]  imgStride    The distance (in bytes) between a pixel and the one immediately below it.
+ *                           This is negative for bottom-up images.
+ * @param [in]  channelNum   The channel whose SSIM is to be computed
+ * @param [in]  channelCount How many channels the image contains
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL At least one of the paramters had an invalid value
+ */
+rmgr_int32_t rmgr_ssim_init_interleaved(rmgr_ssim_ImgParams* params, const rmgr_uint8_t* data, ptrdiff_t imgStride, rmgr_uint32_t channelCount, rmgr_uint32_t channelNum) RMGR_NOEXCEPT;
+
+
+/**
+ * @brief Sets the parameters for a planar image (assuming one channel per plane)
+ *
+ * @param [out] params   The parameter structure to initialize
+ * @param [in]  planes   For each plane, a pointer to its top-left pixel
+ * @param [in]  strides  For each plane, the distance (in bytes) between a pixel and the one immediately below it.
+ *                       This is negative for bottom-up images.
+ * @param [in]  planeNum The channel whose SSIM is to be computed
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL At least one of the paramters had an invalid value
+ */
+rmgr_int32_t rmgr_ssim_init_planar(rmgr_ssim_ImgParams* params, rmgr_uint8_t const* const planes[], const ptrdiff_t strides[], rmgr_uint32_t planeNum) RMGR_NOEXCEPT;
+
+
+/**
+ * @brief Sets the allocation functions to use `malloc()` and `free()`
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL At least one of the paramters had an invalid value
+ */
+rmgr_int32_t rmgr_ssim_use_default_allocator(rmgr_ssim_Params* params) RMGR_NOEXCEPT;
+
+
+/**
+ * @brief Computes the SSIM of a single channel of two images and/or the per-pixel SSIM map
+ *
+ * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the
+ *       `step` and `stride` (as well as the `width` and `height`) parameters if this improves cache
+ *       hit rates. As long as both images are traversed in the same order.
+ *
+ * @param [out] ssim       A pointer to a variable to receive the global SSIM.
+ *                         This can be `NULL` if you do not need it.
+ * @param [in]  params     The set of non-thread related parameters. This cannot be `NULL`.
+ * @param [in]  threadPool The thread pool description. This can be `NULL`, in which case
+ *                         processing will be performed in a single-threaded manner.
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL At least of the parameters was invalid
+ * @retval ENOMEM A memory allocation failed
+ * @retval ECHILD An error occurred in one the threads of the thread pool
+ */
+rmgr_int32_t rmgr_ssim_compute_ssim(float* ssim, const rmgr_ssim_Params* params, const rmgr_ssim_ThreadPool* threadPool) RMGR_NOEXCEPT;
+
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
+
+
+//=================================================================================================
+// C++ API
+
+
+#ifdef __cplusplus
+
+
+inline void rmgr_ssim_ImgParams::init_interleaved(const rmgr_uint8_t* data, ptrdiff_t imgStride, rmgr_uint32_t channelCount, rmgr_uint32_t channelNum) RMGR_NOEXCEPT
+{
+    ::rmgr_ssim_init_interleaved(this, data, imgStride, channelCount, channelNum);
+}
+
+
+inline void rmgr_ssim_ImgParams::init_planar(rmgr_uint8_t const* const planes[], const ptrdiff_t strides[], rmgr_uint32_t planeNum) RMGR_NOEXCEPT
+{
+    ::rmgr_ssim_init_planar(this, planes, strides, planeNum);
+}
+
+
+inline void rmgr_ssim_Params::use_default_allocator() RMGR_NOEXCEPT
+{
+    ::rmgr_ssim_use_default_allocator(this);
+}
+
+
+namespace rmgr { namespace ssim
+{
+
+
+typedef ::rmgr_uint8_t             uint8_t;
+typedef ::rmgr_int32_t             int32_t;
+typedef ::rmgr_uint32_t            uint32_t;
+typedef ::rmgr_uint64_t            uint64_t;
+typedef ::rmgr_ssim_AllocFct       AllocFct;
+typedef ::rmgr_ssim_DeallocFct     DeallocFct;
+typedef ::rmgr_ssim_ThreadFct      ThreadFct;
+typedef ::rmgr_ssim_ThreadPoolFct  ThreadPoolFct;
+typedef ::rmgr_ssim_ImgParams      ImgParams;
+typedef ::rmgr_ssim_Params         GeneralParams;
+typedef ::rmgr_ssim_ThreadPool     ThreadPool;
+typedef GeneralParams              UnthreadedParams;
+
+
+/**
+ * @brief Computes the SSIM of a single channel of two images and/or the per-pixel SSIM map
+ *
+ * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the
+ *       `step` and `stride` (as well as the `width` and `height`) parameters if this improves cache
+ *       hit rates. As long as both images are traversed in the same order.
+ *
+ * @param [out] ssim       A pointer to a variable to receive the global SSIM.
+ *                         This can be `NULL` if you do not need it.
+ * @param [in]  params     The set of non-thread related parameters.
+ * @param [in]  threadPool The thread pool description. This can be `NULL`, in which case
+ *                         processing will be performed in a single-threaded manner.
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL At least of the parameters was invalid
+ * @retval ENOMEM A memory allocation failed
+ * @retval ECHILD An error occurred in one the threads of the thread pool
+ */
+int32_t compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool) RMGR_NOEXCEPT;
 
 
 /**
  * @brief Full set of parameters
  */
-struct Params: public UnthreadedParams
+struct Params: public rmgr_ssim_Params_
 {
-    ThreadPoolFct  threadPool;        ///< A function that dispatches jobs on a thread pool. If `NULL` the processing is done in mono-thread mode.
+    ThreadPoolFct  threadPool;        ///< A function that dispatches jobs on a thread pool. If `NULL` the processing is done in single-thread mode.
     void*          threadPoolContext; ///< A user-defined value that will be passed as-is to the thread pool. Ignored if `threadPool` is `NULL`.
-    unsigned       threadCount;       ///< How many threads are present in the thread pool. Ignored if `threadPool` is `NULL`.
+    uint32_t       threadCount;       ///< How many threads are present in the thread pool. Ignored if `threadPool` is `NULL`.
 };
 
 
 /**
  * @brief Computes the SSIM of a single channel of two images and, optionally, the per-pixel SSIM map
+ *
+ * @deprecated Use `compute_ssim(float* ssim, const UnthreadedParams& params, const ThreadParams* threadParams)` instead
  *
  * @note The SSIM does not depend on the order of traversal of the images, so you can safely swap the
  *       `step` and `stride` (as well as the `width` and `height`) parameters if this improves cache
@@ -541,21 +677,27 @@ struct Params: public UnthreadedParams
  * @retval >=0 The image's SSIM, in the range [0;1].
  * @retval <0  An error occurred, call `get_errno()` to retrieve the error number.
  */
+RMGR_DEPRECATED_MSG("Use compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool) instead")
 float compute_ssim(const Params& params) RMGR_NOEXCEPT;
 
 
 /**
  * @brief Extracts the error number from an SSIM value
  *
+ * @deprecated You don't need this if you use `compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool)`
+ *
  * @retval 0     No error occurred
  * @retval Other One of the error numbers from `cerrno`
  */
-inline int get_errno(float ssim) RMGR_NOEXCEPT
+RMGR_DEPRECATED_MSG("You don't need this if you use compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool)")
+inline int32_t get_errno(float ssim) RMGR_NOEXCEPT
 {
-    return (ssim>=0) ? 0 : -int(ssim);
+    return (ssim>=0) ? 0 : -int32_t(ssim);
 }
 
 
 }} // namespace rmgr::ssim
+#endif // __cplusplus
+
 
 #endif // RMGR_SSIM_H

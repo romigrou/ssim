@@ -21,6 +21,7 @@
 #include <rmgr/ssim.h>
 #include "ssim_internal.h"
 #include <algorithm>
+#include <cassert>
 #include <cerrno>
 #include <climits>
 #include <cmath>
@@ -147,6 +148,74 @@
 #endif
 
 
+//=================================================================================================
+// Parameter init functions
+
+
+extern "C" int32_t rmgr_ssim_init_interleaved(rmgr_ssim_ImgParams* params, const uint8_t* data, ptrdiff_t imgStride, uint32_t channelCount, uint32_t channelNum) RMGR_NOEXCEPT
+{
+    if (params == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: params cannot be NULL\n");
+        return EINVAL;
+    }
+    if (data == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: data cannot be NULL\n");
+        return EINVAL;
+    }
+    if (channelNum >= channelCount)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: channelNum must be < channelCount\n");
+        return EINVAL;
+    }
+
+    params->topLeft = data + channelNum;
+    params->step    = channelCount;
+    params->stride  = imgStride;
+    return 0;
+}
+
+
+extern "C" int32_t rmgr_ssim_init_planar(rmgr_ssim_ImgParams* params, uint8_t const* const planes[], const ptrdiff_t strides[], uint32_t planeNum) RMGR_NOEXCEPT
+{
+    if (params == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: params cannot be NULL\n");
+        return EINVAL;
+    }
+    if (planes == NULL || planes[planeNum] == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: planes cannot be NULL nor contain NULL values\n");
+        return EINVAL;
+    }
+    if (strides == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: strides cannot be NULL\n");
+        return EINVAL;
+    }
+
+    params->topLeft = planes[planeNum];
+    params->step    = 1;
+    params->stride  = strides[planeNum];
+    return 0;
+}
+
+
+extern "C" int32_t rmgr_ssim_use_default_allocator(rmgr_ssim_Params* params) RMGR_NOEXCEPT
+{
+    if (params == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: params cannot be NULL\n");
+        return EINVAL;
+    }
+
+    params->alloc   = default_alloc;
+    params->dealloc = default_dealloc;
+    return 0;
+}
+
+
 namespace rmgr { namespace ssim
 {
 
@@ -167,17 +236,6 @@ static const uint32_t BUFFER_WIDTH     = TILE_MAX_WIDTH  + 2 * HORZ_MARGIN;
 static const uint32_t BUFFER_HEIGHT    = TILE_MAX_HEIGHT + 2 * VERT_MARGIN;
 static const size_t   BUFFER_STRIDE    = ALIGN_UP(BUFFER_WIDTH, ROW_ALIGNMENT);
 static const size_t   BUFFER_CAPACITY  = ALIGN_UP(BUFFER_STRIDE * BUFFER_HEIGHT + ROW_ALIGNMENT-1, BUFFER_ALIGNMENT);
-
-
-//=================================================================================================
-// Allocators
-
-
-void UnthreadedParams::use_default_allocator() RMGR_NOEXCEPT
-{
-    alloc   = default_alloc;
-    dealloc = default_dealloc;
-}
 
 
 //=================================================================================================
@@ -871,7 +929,7 @@ static void process_tile_on_stack_in_thread(void* arg, unsigned tileNum) RMGR_NO
 // Main function
 
 
-float compute_ssim(const Params& params) RMGR_NOEXCEPT
+int32_t compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool) RMGR_NOEXCEPT
 {
     MultiplyFct     multiplyFct     = g_multiplyFct;
     GaussianBlurFct gaussianBlurFct = g_gaussianBlurFct;
@@ -900,16 +958,22 @@ float compute_ssim(const Params& params) RMGR_NOEXCEPT
     const Float  c1 = Float((k1 * L) * (k1 * L));
     const Float  c2 = Float((k2 * L) * (k2 * L));
 
-    if (params.imgA.topLeft==NULL || params.imgB.topLeft==NULL)
+    if (ssim == NULL && params.ssimMap == NULL)
     {
-        RMGR_SSIM_REPORT_ERROR("Invalid parameter: imgA.topLeft or imgB.topLeft is NULL\n");
-        return -EINVAL;
+        RMGR_SSIM_REPORT_ERROR("Invalid parameters: both ssim and ssimMap are NULL, nothing will be computed\n");
+        return EINVAL;
     }
 
-    if (params.threadPool != NULL && params.threadCount == 0u)
+    if (params.imgA.topLeft == NULL || params.imgB.topLeft == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: imgA.topLeft or imgB.topLeft is NULL\n");
+        return EINVAL;
+    }
+
+    if (threadPool != NULL && threadPool->dispatch != NULL && threadPool->threadCount == 0u)
     {
         RMGR_SSIM_REPORT_ERROR("Invalid parameter: threadCount cannot be 0 if threadPool is not NULL\n");
-        return -EINVAL;
+        return EINVAL;
     }
 
     float*    ssimMap    = params.ssimMap;
@@ -957,18 +1021,18 @@ float compute_ssim(const Params& params) RMGR_NOEXCEPT
         sumTileFct
     };
 
-    const unsigned maxThreadCount    = sizeof(void*) * CHAR_BIT; // Good heuristic
+    const uint32_t maxThreadCount    = sizeof(void*) * CHAR_BIT; // Good heuristic
     const unsigned tileHorzCount     = (width  + TILE_MAX_WIDTH  - 1) / TILE_MAX_WIDTH;
     const unsigned tileVertCount     = (height + TILE_MAX_HEIGHT - 1) / TILE_MAX_HEIGHT;
     const unsigned tileCount         = tileHorzCount * tileVertCount;
-    const unsigned actualThreadCount = (params.threadPool != NULL) ? std::min(params.threadCount, maxThreadCount) : 1;
+    const unsigned actualThreadCount = (threadPool!=NULL && threadPool->dispatch!=NULL) ? std::min(threadPool->threadCount, maxThreadCount) : 1;
 
     // Prepare thread params
     ThreadParams threadParams[maxThreadCount] = {};
     void*        threadArgs[maxThreadCount]   = {};
-    if (params.threadPool != NULL)
+    if (threadPool != NULL && threadPool->dispatch != NULL)
     {
-        for (unsigned threadNum=0; threadNum < actualThreadCount; ++threadNum)
+        for (uint32_t threadNum=0; threadNum < actualThreadCount; ++threadNum)
         {
             ThreadParams& p = threadParams[threadNum];
             p.tileHorzCount = tileHorzCount;
@@ -984,16 +1048,16 @@ float compute_ssim(const Params& params) RMGR_NOEXCEPT
     {
         Float* heapBuffer = static_cast<Float*>(params.alloc(6 * BUFFER_CAPACITY * actualThreadCount * sizeof(Float), RMGR_SSIM_TILE_ALIGNMENT));
         if (heapBuffer == NULL)
-            return -ENOMEM;
+            return ENOMEM;
 
-        if (params.threadPool != NULL)
+        if (threadPool != NULL && threadPool->dispatch != NULL)
         {
-            for (unsigned threadNum=0; threadNum < actualThreadCount; ++threadNum)
+            for (uint32_t threadNum=0; threadNum < actualThreadCount; ++threadNum)
             {
                 for (int i=0; i<6; ++i)
                     threadParams[threadNum].tileParams.buffers[i] = heapBuffer + (6*threadNum + i) * BUFFER_CAPACITY;
             }
-            threadPoolResult = params.threadPool(params.threadPoolContext, process_tile_in_thread, threadArgs, actualThreadCount, tileCount);
+            threadPoolResult = threadPool->dispatch(threadPool->context, process_tile_in_thread, threadArgs, actualThreadCount, tileCount);
         }
         else
         {
@@ -1012,8 +1076,8 @@ float compute_ssim(const Params& params) RMGR_NOEXCEPT
     }
     else                      // Use on-stack buffers
     {
-        if (params.threadPool != NULL)
-            threadPoolResult = params.threadPool(params.threadPoolContext, process_tile_on_stack_in_thread, threadArgs, actualThreadCount, tileCount);
+        if (threadPool != NULL && threadPool->dispatch != NULL)
+            threadPoolResult = threadPool->dispatch(threadPool->context, process_tile_on_stack_in_thread, threadArgs, actualThreadCount, tileCount);
         else
         {
             for (uint32_t tileY=0; tileY<height; tileY+=TILE_MAX_HEIGHT)
@@ -1022,17 +1086,49 @@ float compute_ssim(const Params& params) RMGR_NOEXCEPT
         }
     }
 
-    // In case of threaded processing, perform the final sum
-    if (params.threadPool != NULL)
+    // Compute global SSIM
+    if (ssim != NULL)
     {
-        if (threadPoolResult != 0)
-            return -ECHILD;
-        for (unsigned threadNum=0; threadNum<actualThreadCount; ++threadNum)
-            sum += threadParams[threadNum].value;
+        // In case of threaded processing, perform the final sum
+        if (threadPool != NULL && threadPool->dispatch != NULL)
+        {
+            if (threadPoolResult != 0)
+                return ECHILD;
+            for (unsigned threadNum=0; threadNum<actualThreadCount; ++threadNum)
+                sum += threadParams[threadNum].value;
+        }
+
+        *ssim = float(sum / double(width * height));
     }
 
-    return float(sum / double(width * height));
+    return 0;
+}
+
+
+float compute_ssim(const Params& params) RMGR_NOEXCEPT
+{
+    ThreadPool threadPool;
+    threadPool.dispatch    = params.threadPool;
+    threadPool.context     = params.threadPoolContext;
+    threadPool.threadCount = params.threadCount;
+
+    float ssim;
+    const int result = compute_ssim(&ssim, params, &threadPool);
+    assert(result >= 0);
+    return (result == 0) ? ssim : float(-result);
 }
 
 
 }} // namespace rmgr::ssim
+
+
+extern "C" int32_t rmgr_ssim_compute_ssim(float* ssim, const rmgr_ssim_Params* params, const rmgr_ssim_ThreadPool* threadPool) RMGR_NOEXCEPT
+{
+    if (params == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: params cannot be NULL\n");
+        return EINVAL;
+    }
+
+    return rmgr::ssim::compute_ssim(ssim, *params, threadPool);
+}

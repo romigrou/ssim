@@ -19,18 +19,15 @@
  */
 
 #include <rmgr/ssim-openmp.h>
-#include <cassert>
+#include <assert.h>
 #include <omp.h>
 
 
-namespace rmgr { namespace ssim
+static int run_in_openmp(void* context, rmgr_ssim_ThreadFct fct, void* const args[], rmgr_uint32_t threadCount, rmgr_uint32_t jobCount) RMGR_NOEXCEPT
 {
-
-
-static int run_in_openmp(void* /*context*/, ThreadFct fct, void* const args[], unsigned threadCount, unsigned jobCount) RMGR_NOEXCEPT
-{
+    int jobNum;
     #pragma omp parallel for num_threads(threadCount)
-    for (int jobNum=0; jobNum < int(jobCount); ++jobNum)
+    for (jobNum=0; jobNum < (int)jobCount; ++jobNum)
     {
         const unsigned threadNum = omp_get_thread_num();
         assert(threadNum < threadCount);
@@ -40,15 +37,11 @@ static int run_in_openmp(void* /*context*/, ThreadFct fct, void* const args[], u
 }
 
 
-float compute_ssim_openmp(const UnthreadedParams& params) RMGR_NOEXCEPT
+int rmgr_ssim_compute_ssim_openmp(float* ssim, const rmgr_ssim_Params* params) RMGR_NOEXCEPT
 {
-    Params fullParams;
-    static_cast<UnthreadedParams&>(fullParams) = params;
-    fullParams.threadPool        = run_in_openmp;
-    fullParams.threadCount       = omp_get_num_procs();
-    fullParams.threadPoolContext = NULL;
-    return compute_ssim(fullParams);
+    rmgr_ssim_ThreadPool threadPool;
+    threadPool.dispatch    = run_in_openmp;
+    threadPool.context     = NULL;
+    threadPool.threadCount = omp_get_num_procs();
+    return rmgr_ssim_compute_ssim(ssim, params, &threadPool);
 }
-
-
-}} // namespace rmgr::ssim

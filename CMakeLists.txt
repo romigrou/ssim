@@ -16,10 +16,10 @@
 #    misrepresented as being the original software.
 # 3. This notice may not be removed or altered from any source distribution.
 
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.8...3.31)
 
 project(rmgr-ssim
-    VERSION   2.0.0
+    VERSION   2.1.0
     LANGUAGES CXX
 )
 
@@ -146,20 +146,22 @@ target_compile_options(rmgr-ssim PRIVATE ${RMGR_SSIM_COMPILE_OPTIONS})
 target_compile_definitions(rmgr-ssim PRIVATE ${RMGR_SSIM_DEFINITIONS} _USE_MATH_DEFINES)
 
 if (NOT RMGR_SSIM_NO_OPENMP)
-    find_package(OpenMP)
+    enable_language(C)
+    find_package(OpenMP COMPONENTS C)
 endif()
-if ((NOT RMGR_SSIM_NO_OPENMP) AND OpenMP_CXX_FOUND)
+if ((NOT RMGR_SSIM_NO_OPENMP) AND OpenMP_C_FOUND)
     set(RMGR_SSIM_OPENMP_FILES
         "include/rmgr/ssim-openmp.h"
-        "src/ssim-openmp.cpp"
+        "src/ssim-openmp.c"
     )
     source_group("Source Files" FILES ${RMGR_SSIM_OPENMP_FILES})
 
     add_library(rmgr-ssim-openmp ${RMGR_SSIM_OPENMP_FILES})
+    target_compile_options(rmgr-ssim-openmp PRIVATE ${OpenMP_C_FLAGS})
 
     target_link_libraries(rmgr-ssim-openmp
         PUBLIC  rmgr-ssim
-        PRIVATE OpenMP::OpenMP_CXX
+        PRIVATE OpenMP::OpenMP_C
     )
 endif()
 
