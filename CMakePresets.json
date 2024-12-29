@@ -111,12 +111,12 @@
 		{"name":"ninja-gcc",               "displayName": "Ninja w/ GCC",           "inherits":["ninja", "gcc"]},
 		{"name":"ninja-clang",             "displayName": "Ninja w/ Clang",         "inherits":["ninja", "clang"]},
 
-		{"name":"x86-msvc19.3-vs2022",     "displayName": "VS2022 x86",             "inherits":["vs2022",       "vs-x86"]},
+		{"name":"x86-msvc2022-vs2022",     "displayName": "VS2022 x86",             "inherits":["vs2022",       "vs-x86"]},
 		{"name":"x86-clangcl-vs2022",      "displayName": "VS2022 x86 (Clang)",     "inherits":["vs2022-clang", "vs-x86"]},
-		{"name":"amd64-msvc19.3-vs2022",   "displayName": "VS2022 AMD64",           "inherits":["vs2022",       "vs-amd64"]},
+		{"name":"amd64-msvc2022-vs2022",   "displayName": "VS2022 AMD64",           "inherits":["vs2022",       "vs-amd64"]},
 		{"name":"amd64-clangcl-vs2022",    "displayName": "VS2022 AMD64 (Clang)",   "inherits":["vs2022-clang", "vs-amd64"]},
-		{"name":"arm-msvc19.3-vs2022",     "displayName": "VS2022 ARM",             "inherits":["vs2022",       "vs-arm"]},
-		{"name":"aarch64-msvc19.3-vs2022", "displayName": "VS2022 AArch64",         "inherits":["vs2022",       "vs-aarch64"]},
+		{"name":"arm-msvc2022-vs2022",     "displayName": "VS2022 ARM",             "inherits":["vs2022",       "vs-arm"]},
+		{"name":"aarch64-msvc2022-vs2022", "displayName": "VS2022 AArch64",         "inherits":["vs2022",       "vs-aarch64"]},
 		{"name":"aarch64-clang-vs2022",    "displayName": "VS2022 AArch64 (Clang)", "inherits":["vs2022-clang", "vs-aarch64"]}
 	],
 	"buildPresets":
