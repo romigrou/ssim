@@ -18,6 +18,27 @@
 
 cmake_minimum_required(VERSION 3.8...3.31)
 
+if (PROJECT_NAME)
+    set(RMGR_SSIM_IS_TOP_LEVEL 0)
+else()
+    set(RMGR_SSIM_IS_TOP_LEVEL 1)
+endif()
+
+if (RMGR_SSIM_IS_TOP_LEVEL)
+    # Add a build config named RelWithAsserts
+    if (RMGR_SSIM_BUILD_TESTS)
+        get_property(multiConfig GLOBAL PROPERTY "GENERATOR_IS_MULTI_CONFIG")
+        if (multiConfig)
+            set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;RelWithAsserts")
+        endif()
+    endif()
+
+    if (CMAKE_GENERATOR_TOOLSET MATCHES "_clang_c2$")
+        set(CMAKE_CXX_FLAGS_DEBUG "/Z7")
+        #add_compile_options("$<$<CONFIG:Debug>:/Z7")
+    endif()
+endif()
+
 project(rmgr-ssim
     VERSION   2.1.0
     LANGUAGES CXX
@@ -42,6 +63,51 @@ if (RMGR_SSIM_USE_DOUBLE)
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_DOUBLE=1")
 else()
     list(APPEND RMGR_SSIM_DEFINITIONS "RMGR_SSIM_USE_DOUBLE=0")
+endif()
+
+
+# Set flags for the RelWithAsserts config
+if (RMGR_SSIM_IS_TOP_LEVEL AND CMAKE_CONFIGURATION_TYPES MATCHES "RelWithAsserts")
+    # Use flags from RelWithDebInfo as base
+    foreach (tool C CXX EXE_LINKER MODULE_LINKER SHARED_LINKER STATIC_LINKER)
+        set(CMAKE_${tool}_FLAGS_RELWITHASSERTS "${CMAKE_${tool}_FLAGS_RELWITHDEBINFO}")
+    endforeach()
+
+    # Remove the NDEBUG macro
+    foreach (lang C CXX)
+        string(REGEX REPLACE "[/-]DNDEBUG" "" CMAKE_${lang}_FLAGS_RELWITHASSERTS "${CMAKE_${lang}_FLAGS_RELWITHASSERTS}")
+    endforeach()
+
+    # MSVC-specific nightmare
+    if (MSVC)
+        # Debug info format
+        set(cmp0141Status "")
+        if (POLICY CMP0091)
+            cmake_policy(GET CMP0141 cmp0141Status)
+        endif()
+        if (cmp0141Status STREQUAL "NEW")
+            set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<CONFIG:Debug,RelWithDebInfo,RelWithAsserts>,ProgramDatabase,>")
+        endif()
+
+        # Use the debug version of MSVCRT (so as to enable the _ASSERTE macro)
+        set(cmp0091Status "")
+        if (POLICY CMP0091)
+            cmake_policy(GET CMP0091 cmp0091Status)
+        endif()
+        if (cmp0091Status STREQUAL "NEW")
+            set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<IF:$<CONFIG:Debug,RelWithAsserts>,Debug,>DLL")
+        else()
+            foreach (lang C CXX)
+                if (CMAKE_${lang}_FLAGS_RELWITHASSERTS MATCHES "\\/MT")
+                    string(REGEX REPLACE "\\/MT[ \\t]" "/MTd " CMAKE_${lang}_FLAGS_RELWITHASSERTS "${CMAKE_${lang}_FLAGS_RELWITHASSERTS}")
+                elseif (CMAKE_${lang}_FLAGS_RELWITHASSERTS MATCHES "\\/MD")
+                    string(REGEX REPLACE "\\/MD[ \\t]" "/MDd " CMAKE_${lang}_FLAGS_RELWITHASSERTS "${CMAKE_${lang}_FLAGS_RELWITHASSERTS}")
+                else()
+                    set(CMAKE_${lang}_FLAGS_RELWITHASSERTS "${CMAKE_${lang}_FLAGS_RELWITHASSERTS} /MDd")
+                endif()
+            endforeach()
+        endif()
+    endif()
 endif()
 
 
