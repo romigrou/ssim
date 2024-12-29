@@ -19,6 +19,7 @@
  */
 
 #include <rmgr/ssim.h>
+#include <rmgr/ssim-version.h>
 #include "ssim_internal.h"
 #include <algorithm>
 #include <cassert>
@@ -1120,6 +1121,25 @@ float compute_ssim(const Params& params) RMGR_NOEXCEPT
 
 
 }} // namespace rmgr::ssim
+
+
+static const char g_versionString[] = {RMGR_SSIM_VERSION_STRING};
+
+
+extern "C" int32_t rmgr_ssim_get_version(rmgr_ssim_Version* version) RMGR_NOEXCEPT
+{
+    if (version == NULL)
+    {
+        RMGR_SSIM_REPORT_ERROR("Invalid parameter: version cannot be NULL\n");
+        return EINVAL;
+    }
+
+    version->major  = RMGR_SSIM_VERSION_MAJOR;
+    version->minor  = RMGR_SSIM_VERSION_MINOR;
+    version->patch  = RMGR_SSIM_VERSION_PATCH;
+    version->string = g_versionString;
+    return 0;
+}
 
 
 extern "C" int32_t rmgr_ssim_compute_ssim(float* ssim, const rmgr_ssim_Params* params, const rmgr_ssim_ThreadPool* threadPool) RMGR_NOEXCEPT

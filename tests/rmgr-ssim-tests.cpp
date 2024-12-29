@@ -20,6 +20,7 @@
 
 #include "ssim_naive.h"
 #include <rmgr/ssim.h>
+#include <rmgr/ssim-version.h>
 #if RMGR_SSIM_USE_OPENMP
     #include <rmgr/ssim-openmp.h>
 #endif
@@ -496,6 +497,17 @@ static void test_bbb257(rmgr::ssim::Implementation impl, bool openmp, bool useHe
     TEST_X86(name)     \
     TEST_ARM(name)     \
     TEST_AUTO(name)
+
+
+TEST(General, get_version)
+{
+    rmgr::ssim::Version version = rmgr::ssim::get_version();
+    ASSERT_EQ(RMGR_SSIM_VERSION_MAJOR, version.major);
+    ASSERT_EQ(RMGR_SSIM_VERSION_MINOR, version.minor);
+    ASSERT_EQ(RMGR_SSIM_VERSION_PATCH, version.patch);
+    ASSERT_STREQ(RMGR_SSIM_VERSION_STRING, version.string);
+}
+
 
 TEST_ALL(einstein)
 TEST_ALL(bbb255)

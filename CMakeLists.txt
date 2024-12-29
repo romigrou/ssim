@@ -170,6 +170,8 @@ endif()
 ###################################################################################################
 # Source files
 
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/ssim-version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/rmgr/ssim-version.h")
+
 set(RMGR_SSIM_FILES
     "include/rmgr/ssim.h"
     "src/ssim.cpp"
@@ -179,6 +181,7 @@ set(RMGR_SSIM_FILES
     "src/ssim_avx512.cpp"
     "src/ssim_fma.cpp"
     "src/ssim_neon.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/rmgr/ssim-version.h"
 )
 
 # Apply SIMD compile flags to source files
@@ -204,6 +207,7 @@ add_library(rmgr-ssim STATIC ${RMGR_SSIM_FILES})
 target_include_directories(rmgr-ssim
     PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
     INTERFACE
         "$<INSTALL_INTERFACE:${CMAKE_INSTALL_FULL_INCLUDE_DIR}>"
 )
@@ -315,7 +319,13 @@ endif()
 # Install rules
 
 install(TARGETS rmgr-ssim ARCHIVE     DESTINATION "${CMAKE_INSTALL_LIBDIR}")
-install(FILES   "include/rmgr/ssim.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/rmgr")
+install(
+    FILES
+        "include/rmgr/ssim.h"
+        "${CMAKE_CURRENT_BINARY_DIR}/rmgr/ssim-version.h"
+    DESTINATION
+        "${CMAKE_INSTALL_INCLUDEDIR}/rmgr"
+)
 if (TARGET rmgr-ssim-openmp)
     install(FILES "include/rmgr/ssim-openmp.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/rmgr")
 endif()

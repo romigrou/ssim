@@ -466,6 +466,15 @@ typedef void (*rmgr_ssim_ThreadFct)(void* arg, rmgr_uint32_t jobNum) RMGR_NOEXCE
 typedef rmgr_int32_t (*rmgr_ssim_ThreadPoolFct)(void* context, rmgr_ssim_ThreadFct fct, void* const args[], rmgr_uint32_t threadCount, rmgr_uint32_t jobCount) RMGR_NOEXCEPT_TYPEDEF;
 
 
+typedef struct rmgr_ssim_Version_
+{
+    rmgr_uint32_t major;
+    rmgr_uint32_t minor;
+    rmgr_uint32_t patch;
+    const char*   string;
+} rmgr_ssim_Version;
+
+
 /**
  * @brief Set of parameters relative to an input image
  *
@@ -522,6 +531,17 @@ typedef struct rmgr_ssim_ThreadPool_
     void*                   context;     ///< A user-defined value that will be passed as-is to the thread pool. Ignored if `threadPool` is `NULL`.
     rmgr_uint32_t           threadCount; ///< How many threads are present in the thread pool. Ignored if `threadPool` is `NULL`.
 } rmgr_ssim_ThreadPool;
+
+
+/**
+ * @brief Retrieves rmgr-ssim's version number
+ *
+ * @param [out] version A pointer to the version structure to fill. This cannot be `NULL`.
+ *
+ * @retval 0      Everything went fine
+ * @retval EINVAL `version` was `NULL`
+ */
+rmgr_int32_t rmgr_ssim_get_version(rmgr_ssim_Version* version) RMGR_NOEXCEPT;
 
 
 /**
@@ -627,10 +647,22 @@ typedef ::rmgr_ssim_AllocFct       AllocFct;
 typedef ::rmgr_ssim_DeallocFct     DeallocFct;
 typedef ::rmgr_ssim_ThreadFct      ThreadFct;
 typedef ::rmgr_ssim_ThreadPoolFct  ThreadPoolFct;
+typedef ::rmgr_ssim_Version        Version;
 typedef ::rmgr_ssim_ImgParams      ImgParams;
 typedef ::rmgr_ssim_Params         GeneralParams;
 typedef ::rmgr_ssim_ThreadPool     ThreadPool;
 typedef GeneralParams              UnthreadedParams;
+
+
+/**
+ * @brief Retrieves rmgr-ssim's version number
+ */
+inline Version get_version() RMGR_NOEXCEPT
+{
+    Version version;
+    ::rmgr_ssim_get_version(&version);
+    return version;
+}
 
 
 /**
