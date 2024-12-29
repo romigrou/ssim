@@ -493,8 +493,8 @@ typedef struct rmgr_ssim_ImgParams_
     ptrdiff_t           stride;  ///< The distance (in bytes) between a pixel and the one immediately below it
 
 #ifdef __cplusplus
-    void init_interleaved(const rmgr_uint8_t* data, ptrdiff_t imgStride, rmgr_uint32_t channelCount, rmgr_uint32_t channelNum) RMGR_NOEXCEPT;
-    void init_planar(rmgr_uint8_t const* const planes[], const ptrdiff_t strides[], rmgr_uint32_t planeNum) RMGR_NOEXCEPT;
+    rmgr_int32_t init_interleaved(const rmgr_uint8_t* data, ptrdiff_t imgStride, rmgr_uint32_t channelCount, rmgr_uint32_t channelNum) RMGR_NOEXCEPT;
+    rmgr_int32_t init_planar(rmgr_uint8_t const* const planes[], const ptrdiff_t strides[], rmgr_uint32_t planeNum) RMGR_NOEXCEPT;
 #endif
 } rmgr_ssim_ImgParams;
 
@@ -617,15 +617,15 @@ rmgr_int32_t rmgr_ssim_compute_ssim(float* ssim, const rmgr_ssim_Params* params,
 #ifdef __cplusplus
 
 
-inline void rmgr_ssim_ImgParams::init_interleaved(const rmgr_uint8_t* data, ptrdiff_t imgStride, rmgr_uint32_t channelCount, rmgr_uint32_t channelNum) RMGR_NOEXCEPT
+inline rmgr_int32_t rmgr_ssim_ImgParams::init_interleaved(const rmgr_uint8_t* data, ptrdiff_t imgStride, rmgr_uint32_t channelCount, rmgr_uint32_t channelNum) RMGR_NOEXCEPT
 {
-    ::rmgr_ssim_init_interleaved(this, data, imgStride, channelCount, channelNum);
+    return ::rmgr_ssim_init_interleaved(this, data, imgStride, channelCount, channelNum);
 }
 
 
-inline void rmgr_ssim_ImgParams::init_planar(rmgr_uint8_t const* const planes[], const ptrdiff_t strides[], rmgr_uint32_t planeNum) RMGR_NOEXCEPT
+inline rmgr_int32_t rmgr_ssim_ImgParams::init_planar(rmgr_uint8_t const* const planes[], const ptrdiff_t strides[], rmgr_uint32_t planeNum) RMGR_NOEXCEPT
 {
-    ::rmgr_ssim_init_planar(this, planes, strides, planeNum);
+    return ::rmgr_ssim_init_planar(this, planes, strides, planeNum);
 }
 
 
@@ -683,7 +683,7 @@ inline Version get_version() RMGR_NOEXCEPT
  * @retval ENOMEM A memory allocation failed
  * @retval ECHILD An error occurred in one the threads of the thread pool
  */
-int32_t compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool) RMGR_NOEXCEPT;
+int32_t compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool=NULL) RMGR_NOEXCEPT;
 
 
 /**
