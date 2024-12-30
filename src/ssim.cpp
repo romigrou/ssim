@@ -54,6 +54,42 @@
 #define ALIGN_UP(size, alignment)  (((size) + (alignment)-1) & ~size_t((alignment)-1))
 
 
+#if 1
+    #define DUMP_TILE(...)
+#else
+    #define STB_IMAGE_WRITE_IMPLEMENTATION
+    #define STB_IMAGE_WRITE_STATIC
+    RMGR_WARNING_PUSH()
+    RMGR_WARNING_GCC_DISABLE("-Wsign-compare")
+    RMGR_WARNING_CLANG_DISABLE("-Wmissing-field-initializers")
+    RMGR_WARNING_MSVC_DISABLE(4505)
+    RMGR_WARNING_MSVC_DISABLE(4996)
+    #include "stb_image_write.h"
+    RMGR_WARNING_POP()
+
+    #define DUMP_TILE_DIR  "C:/Devel/ssim/fast/"
+    void dump_tile(const char* name, unsigned tileX, unsigned tileY, const rmgr::ssim::Float* img, uint32_t width, uint32_t height, size_t stride)
+    {
+        uint8_t* buffer = new uint8_t[width*height];
+
+        uint8_t* d = buffer;
+        for (uint32_t y=0; y<  height; ++y)
+        {
+            for (uint32_t x=0; x < width; ++x)
+                *d++ = uint8_t(std::min(std::max(rmgr::ssim::Float(0), img[x]), rmgr::ssim::Float(255)));
+            img += stride;
+        }
+
+        char path[256];
+        snprintf(path, sizeof(path), DUMP_TILE_DIR "%04u_%04u_%s.bmp", tileX, tileY, name);
+        stbi_write_bmp(path, width, height, 1, buffer);
+        delete[] buffer;
+    }
+
+    #define DUMP_TILE(name)  dump_tile(#name, tp.tileX, tp.tileY, name, tileWidth, tileHeight, tileStride)
+#endif
+
+
 //=================================================================================================
 // cpu_id()
 
@@ -315,6 +351,73 @@ static void precompute_gaussian_kernel(Float kernel[], int radius, Float sigma) 
     }
     printf("}\n\n");
 #endif
+}
+
+
+static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float /*kernel*/[]) RMGR_NOEXCEPT
+{
+    const Float k5 = Float(1.02838035672903061e-03);
+    const Float k4 = Float(7.59875820949673653e-03);
+    const Float k3 = Float(3.60007733106613159e-02);
+    const Float k2 = Float(1.09360694885253906e-01);
+    const Float k1 = Float(2.13005542755126953e-01);
+    const Float k0 = Float(2.66011744737625122e-01);
+
+    for (int32_t y=0; y < height; ++y)
+    {
+        ptrdiff_t x = 0;
+
+#if 0
+        for (; x+4 <= width; x+=4)
+        {
+            #define S(n,i)  k##n * (srce[x-n+i] + srce[x+n+i])
+            #define S_0(i)  k0 * srce[x+i]
+
+            Float d0, d1, d2, d3;
+            d0 =S(5,0);  d1 =S(5,1);  d2 =S(5,2);  d3 =S(5,3);
+            d0+=S(4,0);  d1+=S(4,1);  d2+=S(4,2);  d3+=S(4,3);
+            d0+=S(3,0);  d1+=S(3,1);  d2+=S(3,2);  d3+=S(3,3);
+            d0+=S(2,0);  d1+=S(2,1);  d2+=S(2,2);  d3+=S(2,3);
+            d0+=S(1,0);  d1+=S(1,1);  d2+=S(1,2);  d3+=S(1,3);
+            d0+=S_0(0);  d1+=S_0(1);  d2+=S_0(2);  d3+=S_0(3);
+
+            *dest = d0;  dest += destStride;
+            *dest = d1;  dest += destStride;
+            *dest = d2;  dest += destStride;
+            *dest = d3;  dest += destStride;
+        }
+#endif
+
+        for (; x < width; ++x)
+        {
+            Float d;
+            d  = k5 * (srce[x-5] + srce[x+5]);
+            d += k4 * (srce[x-4] + srce[x+4]);
+            d += k3 * (srce[x-3] + srce[x+3]);
+            d += k2 * (srce[x-2] + srce[x+2]);
+            d += k1 * (srce[x-1] + srce[x+1]);
+            d += k0 * srce[x];
+            *dest = d;
+            dest += destStride;
+        }
+
+        srce += srceStride;
+        dest -= (destStride * width) - 1;
+    }
+}
+
+
+static void gaussian_blur_fast(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
+{
+    const ptrdiff_t tmpStride   = TILE_MAX_HEIGHT + 2*GAUSSIAN_RADIUS; // Height, not width, because the result is transposed
+    const Float*    pass1Srce   = srce - GAUSSIAN_RADIUS*srceStride;
+    const int32_t   pass1Height = height + 2*GAUSSIAN_RADIUS;
+
+    Float tmp[tmpStride * TILE_MAX_WIDTH];
+    gaussian_blur_pass(tmp, tmpStride, pass1Srce, srceStride, width,  pass1Height, kernel);
+
+    const Float* pass2Srce = tmp + GAUSSIAN_RADIUS;
+    gaussian_blur_pass(dest, destStride, pass2Srce, tmpStride,  height, width, kernel);
 }
 
 
@@ -759,6 +862,8 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
     Float* b = tp.buffers[2] + offsetToTopLeft;
     retrieve_tile(a, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgA.topLeft, gp.width, gp.height, gp.imgA.step, gp.imgA.stride);
     retrieve_tile(b, tileWidth, tileHeight, tileStride, gp.gaussianRadius, tp.tileX, tp.tileY, gp.imgB.topLeft, gp.width, gp.height, gp.imgB.step, gp.imgB.stride);
+    DUMP_TILE(a);
+    DUMP_TILE(b);
 
     Float* a2 = tp.buffers[3] + offsetToTopLeft;
     Float* b2 = tp.buffers[4] + offsetToTopLeft;
@@ -766,6 +871,9 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
     gp.multiply(a2, a, a, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
     gp.multiply(b2, b, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
     gp.multiply(ab, a, b, tileWidth, tileHeight, tileStride, gp.gaussianRadius);
+    DUMP_TILE(a2);
+    DUMP_TILE(b2);
+    DUMP_TILE(ab);
 
     Float* muA     = tp.buffers[0] + offsetToTopLeft;
     Float* muB     = tp.buffers[1] + offsetToTopLeft;
@@ -777,6 +885,11 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
     gp.gaussianBlur(sigmaA2, tileStride, a2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
     gp.gaussianBlur(sigmaB2, tileStride, b2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
     gp.gaussianBlur(sigmaAB, tileStride, ab, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
+    DUMP_TILE(muA);
+    DUMP_TILE(muB);
+    DUMP_TILE(sigmaA2);
+    DUMP_TILE(sigmaB2);
+    DUMP_TILE(sigmaAB);
 
     float* ssimTile = gp.ssimMap + (tp.tileX * gp.ssimStep) + (tp.tileY * gp.ssimStride);
     return gp.sumTile(tileWidth, tileHeight, tileStride, gp.c1, gp.c2, muA, muB, sigmaA2, sigmaB2, sigmaAB, ssimTile, gp.ssimStep, gp.ssimStride);
@@ -889,7 +1002,7 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
 
     // Fall back to generic implementation if needed
     g_multiplyFct     = (multiplyFct     != NULL) ? multiplyFct     : multiply;
-    g_gaussianBlurFct = (gaussianBlurFct != NULL) ? gaussianBlurFct : gaussian_blur;
+    g_gaussianBlurFct = (gaussianBlurFct != NULL) ? gaussianBlurFct : gaussian_blur_fast;
     g_sumTileFct      = (sumTileFct      != NULL) ? sumTileFct      : sum_tile;
 
     return supportedImpls;

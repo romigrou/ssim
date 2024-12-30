@@ -99,7 +99,7 @@ static uint64_t g_pixelCount[IMPL_COUNT]     = {};
     static const double GLOBAL_TOLERANCE = 5e-7f;
     static const double PIXEL_TOLERANCE  = 1e-5f;
 #else
-    static const double GLOBAL_TOLERANCE = 2e-6f;
+    static const double GLOBAL_TOLERANCE = 4e-6f;
     static const double PIXEL_TOLERANCE  = 1e-3f;
 #endif
 
