@@ -407,17 +407,17 @@ static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* s
 }
 
 
-static void gaussian_blur_fast(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT
+static void gaussian_blur_fast(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius, GaussianPassFct gaussianPass) RMGR_NOEXCEPT
 {
     const ptrdiff_t tmpStride   = TILE_MAX_HEIGHT + 2*GAUSSIAN_RADIUS; // Height, not width, because the result is transposed
     const Float*    pass1Srce   = srce - GAUSSIAN_RADIUS*srceStride;
     const int32_t   pass1Height = height + 2*GAUSSIAN_RADIUS;
 
     Float tmp[tmpStride * TILE_MAX_WIDTH];
-    gaussian_blur_pass(tmp, tmpStride, pass1Srce, srceStride, width,  pass1Height, kernel);
+    gaussianPass(tmp, tmpStride, pass1Srce, srceStride, width,  pass1Height, kernel);
 
     const Float* pass2Srce = tmp + GAUSSIAN_RADIUS;
-    gaussian_blur_pass(dest, destStride, pass2Srce, tmpStride,  height, width, kernel);
+    gaussianPass(dest, destStride, pass2Srce, tmpStride,  height, width, kernel);
 }
 
 
@@ -834,6 +834,7 @@ struct GlobalParams
     Float           c1;
     Float           c2;
     MultiplyFct     multiply;
+    GaussianPassFct gaussianPass;
     GaussianBlurFct gaussianBlur;
     SumTileFct      sumTile;
 };
@@ -880,11 +881,11 @@ static double process_tile(const TileParams& tp, const GlobalParams& gp) RMGR_NO
     Float* sigmaA2 = tp.buffers[2] + offsetToTopLeft;
     Float* sigmaB2 = tp.buffers[3] + offsetToTopLeft;
     Float* sigmaAB = tp.buffers[4] + offsetToTopLeft;
-    gp.gaussianBlur(muA,     tileStride, a,  tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
-    gp.gaussianBlur(muB,     tileStride, b,  tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
-    gp.gaussianBlur(sigmaA2, tileStride, a2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
-    gp.gaussianBlur(sigmaB2, tileStride, b2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
-    gp.gaussianBlur(sigmaAB, tileStride, ab, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius);
+    gaussian_blur_fast(muA,     tileStride, a,  tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius, gp.gaussianPass);
+    gaussian_blur_fast(muB,     tileStride, b,  tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius, gp.gaussianPass);
+    gaussian_blur_fast(sigmaA2, tileStride, a2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius, gp.gaussianPass);
+    gaussian_blur_fast(sigmaB2, tileStride, b2, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius, gp.gaussianPass);
+    gaussian_blur_fast(sigmaAB, tileStride, ab, tileStride, tileWidth, tileHeight, gp.gaussianKernel, gp.gaussianRadius, gp.gaussianPass);
     DUMP_TILE(muA);
     DUMP_TILE(muB);
     DUMP_TILE(sigmaA2);
@@ -909,6 +910,7 @@ double process_tile_on_stack(uint32_t tileX, uint32_t tileY, const GlobalParams&
 
 
 volatile MultiplyFct     g_multiplyFct     = NULL;
+volatile GaussianPassFct g_gaussianPassFct = NULL;
 volatile GaussianBlurFct g_gaussianBlurFct = NULL;
 volatile SumTileFct      g_sumTileFct      = NULL;
 
@@ -923,6 +925,7 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
     unsigned supportedImpls = (1 << IMPL_AUTO) | (1 << IMPL_GENERIC);
 
     MultiplyFct     multiplyFct     = NULL;
+    GaussianPassFct gaussianPassFct = NULL;
     GaussianBlurFct gaussianBlurFct = NULL;
     SumTileFct      sumTileFct      = NULL;
 
@@ -955,11 +958,13 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
     if ((supportedImpls & (1 << IMPL_SSE)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_SSE))
     {
         multiplyFct     = sse::g_multiplyFct;
+        gaussianPassFct = sse::g_gaussianPassFct;
         gaussianBlurFct = sse::g_gaussianBlurFct;
     }
     if ((supportedImpls & (1 << IMPL_SSE2)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_SSE2))
     {
         multiplyFct     = sse2::g_multiplyFct;
+        gaussianPassFct = sse2::g_gaussianPassFct;
         gaussianBlurFct = sse2::g_gaussianBlurFct;
         sumTileFct      = sse2::g_sumTileFct;
     }
@@ -1002,7 +1007,8 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
 
     // Fall back to generic implementation if needed
     g_multiplyFct     = (multiplyFct     != NULL) ? multiplyFct     : multiply;
-    g_gaussianBlurFct = (gaussianBlurFct != NULL) ? gaussianBlurFct : gaussian_blur_fast;
+    g_gaussianPassFct = (gaussianPassFct != NULL) ? gaussianPassFct : gaussian_blur_pass;
+    g_gaussianBlurFct = (gaussianBlurFct != NULL) ? gaussianBlurFct : gaussian_blur;
     g_sumTileFct      = (sumTileFct      != NULL) ? sumTileFct      : sum_tile;
 
     return supportedImpls;
@@ -1046,13 +1052,15 @@ static void process_tile_on_stack_in_thread(void* arg, unsigned tileNum) RMGR_NO
 int32_t compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool* threadPool) RMGR_NOEXCEPT
 {
     MultiplyFct     multiplyFct     = g_multiplyFct;
+    GaussianPassFct gaussianPassFct = g_gaussianPassFct;
     GaussianBlurFct gaussianBlurFct = g_gaussianBlurFct;
     SumTileFct      sumTileFct      = g_sumTileFct;
-    if (multiplyFct==NULL || gaussianBlurFct==NULL || multiplyFct==NULL)
+    if (multiplyFct==NULL || gaussianPassFct==NULL || gaussianBlurFct==NULL || multiplyFct==NULL)
     {
         select_impl(IMPL_AUTO);
 
         multiplyFct     = g_multiplyFct;
+        gaussianPassFct = g_gaussianPassFct;
         gaussianBlurFct = g_gaussianBlurFct;
         sumTileFct      = g_sumTileFct;
     }
@@ -1131,6 +1139,7 @@ int32_t compute_ssim(float* ssim, const GeneralParams& params, const ThreadPool*
         c1,
         c2,
         multiplyFct,
+        gaussianPassFct,
         gaussianBlurFct,
         sumTileFct
     };

@@ -39,6 +39,7 @@
 namespace rmgr { namespace ssim { namespace sse
 {
     const MultiplyFct     g_multiplyFct     = NULL;
+    const GaussianPassFct g_gaussianPassFct = NULL;
     const GaussianBlurFct g_gaussianBlurFct = NULL;
     const SumTileFct      g_sumTileFct      = NULL;
 }}}
@@ -60,6 +61,7 @@ namespace rmgr { namespace ssim { namespace sse
     #define VCOEFF(val)    val, val
     #define VLOADA(addr)   _mm_load_pd((addr))
     #define VLOADU(addr)   _mm_loadu_pd((addr))
+    #define VSTORE(addr,v) _mm_store_pd((addr), (v))
     #define VADD(a,b)      _mm_add_pd((a), (b))
     #define VSUB(a,b)      _mm_sub_pd((a), (b))
     #define VMUL(a,b)      _mm_mul_pd((a), (b))
@@ -71,6 +73,7 @@ namespace rmgr { namespace ssim { namespace sse
     #define VCOEFF(val)    val##f, val##f, val##f, val##f
     #define VLOADA(addr)   _mm_load_ps((addr))
     #define VLOADU(addr)   _mm_loadu_ps((addr))
+    #define VSTORE(addr,v) _mm_store_ps((addr), (v))
     #define VADD(a,b)      _mm_add_ps((a), (b))
     #define VSUB(a,b)      _mm_sub_ps((a), (b))
     #define VMUL(a,b)      _mm_mul_ps((a), (b))
@@ -126,6 +129,153 @@ const MultiplyFct sse2::g_multiplyFct = multiply;
 const MultiplyFct sse::g_multiplyFct  = NULL;
 #else
 const MultiplyFct sse::g_multiplyFct  = multiply;
+#endif
+
+
+//=================================================================================================
+// gaussian_pass()
+
+static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float /*kernel*/[]) RMGR_NOEXCEPT
+{
+    const Float k5 = Float(1.02838035672903061e-03);
+    const Float k4 = Float(7.59875820949673653e-03);
+    const Float k3 = Float(3.60007733106613159e-02);
+    const Float k2 = Float(1.09360694885253906e-01);
+    const Float k1 = Float(2.13005542755126953e-01);
+    const Float k0 = Float(2.66011744737625122e-01);
+
+    const Vector vk5 = VSET1(k5);
+    const Vector vk4 = VSET1(k4);
+    const Vector vk3 = VSET1(k3);
+    const Vector vk2 = VSET1(k2);
+    const Vector vk1 = VSET1(k1);
+    const Vector vk0 = VSET1(k0);
+
+    // We unroll on the width of a vector (because we need to transpose before writing)
+    #define UNROLL0(action,...)    action(0,__VA_ARGS__)
+    #define UNROLL1(action,...)    action(1,__VA_ARGS__)
+#if VEC_SIZE == 4
+    #define UNROLL2(action,...)    action(2,__VA_ARGS__)
+    #define UNROLL3(action,...)    action(3,__VA_ARGS__)
+    #define TRANSPOSE()            _MM_TRANSPOSE4_PS(d0, d1, d2, d3);
+#elif VEC_SIZE == 2
+    #define UNROLL2(...)
+    #define UNROLL3(...)
+    #define TRANSPOSE()                                \
+        const __m128d tmp = _mm_shuffle_pd(d0, d1, 0); \
+        d1 = _mm_shuffle_pd(d0, d1, 3);                \
+        d0 = tmp;
+#else
+    #error Incorrect vector size
+#endif
+
+    int32_t y = 0;
+    for (; y+VEC_SIZE <= height; y+=VEC_SIZE)
+    {
+        const Float* s0 = srce;
+        const Float* s1 = srce + srceStride;
+#if VEC_SIZE == 4
+        const Float* s2 = srce + srceStride*2;
+        const Float* s3 = srce + srceStride*3;
+#endif
+
+        // Main SIMD loop
+        ptrdiff_t x = 0;
+        for (; x+VEC_SIZE <= width; x+=VEC_SIZE)
+        {
+            #define ACC2(yi,xi)    VMUL(VADD(VLOADU(s##yi + x - xi), VLOADU(s##yi + x + xi)), vk##xi)
+            #define D_5(yi,bogus)  Vector d##yi = ACC2(yi,5)
+            #define D(  yi,xi)     d##yi = VADD(d##yi, ACC2(yi,xi))
+            #define D_0(yi,bogus)  d##yi = VADD(d##yi,  VMUL(VLOADU(s##yi+x), vk0))
+
+            UNROLL0(D_5);  UNROLL1(D_5);  UNROLL2(D_5);  UNROLL3(D_5);
+            UNROLL0(D,4);  UNROLL1(D,4);  UNROLL2(D,4);  UNROLL3(D,4);
+            UNROLL0(D,3);  UNROLL1(D,3);  UNROLL2(D,3);  UNROLL3(D,3);
+            UNROLL0(D,2);  UNROLL1(D,2);  UNROLL2(D,2);  UNROLL3(D,2);
+            UNROLL0(D,1);  UNROLL1(D,1);  UNROLL2(D,1);  UNROLL3(D,1);
+            UNROLL0(D_0);  UNROLL1(D_0);  UNROLL2(D_0);  UNROLL3(D_0);
+
+            TRANSPOSE()
+
+            VSTORE(dest, d0);  dest+=destStride;
+            VSTORE(dest, d1);  dest+=destStride;
+#if VEC_SIZE == 4
+            VSTORE(dest, d2);  dest+=destStride;
+            VSTORE(dest, d3);  dest+=destStride;
+#endif
+
+            #undef ACC2
+            #undef D_5
+            #undef D
+            #undef D_0
+        }
+
+        // Scalar epilogue for width
+        for (; x < width; ++x)
+        {
+            #define ACC2(yi,xi)    (s##yi[x-xi] + s##yi[x+xi]) * k##xi
+            #define D_5(yi,bogus)  Float d##yi = ACC2(yi,5)
+            #define D(  yi,xi)     d##yi += ACC2(yi,xi)
+            #define D_0(yi,bogus)  d##yi += s##yi[x] * k0
+
+            UNROLL0(D_5);  UNROLL1(D_5);  UNROLL2(D_5);  UNROLL3(D_5);
+            UNROLL0(D,4);  UNROLL1(D,4);  UNROLL2(D,4);  UNROLL3(D,4);
+            UNROLL0(D,3);  UNROLL1(D,3);  UNROLL2(D,3);  UNROLL3(D,3);
+            UNROLL0(D,2);  UNROLL1(D,2);  UNROLL2(D,2);  UNROLL3(D,2);
+            UNROLL0(D,1);  UNROLL1(D,1);  UNROLL2(D,1);  UNROLL3(D,1);
+            UNROLL0(D_0);  UNROLL1(D_0);  UNROLL2(D_0);  UNROLL3(D_0);
+
+            dest[0] = d0;
+            dest[1] = d1;
+#if VEC_SIZE == 4
+            dest[2] = d2;
+            dest[3] = d3;
+#endif
+            dest += destStride;
+
+            #undef ACC2
+            #undef D_5
+            #undef D
+            #undef D_0
+        }
+
+        srce += srceStride * VEC_SIZE;
+        dest -= (destStride * width) - VEC_SIZE;
+    }
+
+    #undef UNROLL0
+    #undef UNROLL1
+    #undef UNROLL2
+    #undef UNROLL3
+    #undef TRANSPOSE
+
+    // Scalar epilogue for height
+    for (; y < height; ++y)
+    {
+        for (ptrdiff_t x=0; x < width; ++x)
+        {
+            Float d;
+            d  = k5 * (srce[x-5] + srce[x+5]);
+            d += k4 * (srce[x-4] + srce[x+4]);
+            d += k3 * (srce[x-3] + srce[x+3]);
+            d += k2 * (srce[x-2] + srce[x+2]);
+            d += k1 * (srce[x-1] + srce[x+1]);
+            d += k0 * srce[x];
+            *dest = d;
+            dest += destStride;
+        }
+
+        srce += srceStride;
+        dest -= (destStride * width) - 1;
+    }
+}
+
+
+const GaussianPassFct sse2::g_gaussianPassFct = gaussian_blur_pass;
+#if RMGR_SSIM_USE_DOUBLE
+const GaussianPassFct sse::g_gaussianPassFct  = NULL;
+#else
+const GaussianPassFct sse::g_gaussianPassFct  = gaussian_blur_pass;
 #endif
 
 

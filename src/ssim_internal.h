@@ -55,6 +55,8 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT;
 
 typedef void (*MultiplyFct)(Float* product, const Float* a, const Float* b, uint32_t width, uint32_t height, size_t stride, uint32_t margin) RMGR_NOEXCEPT_TYPEDEF;
 
+typedef void (*GaussianPassFct)(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[]) RMGR_NOEXCEPT_TYPEDEF;
+
 typedef void (*GaussianBlurFct)(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT_TYPEDEF;
 
 typedef double (*SumTileFct)(uint32_t tileWidth, uint32_t tileHeight, uint32_t tileStride, Float c1, Float c2,
@@ -66,12 +68,14 @@ typedef double (*SumTileFct)(uint32_t tileWidth, uint32_t tileHeight, uint32_t t
 namespace sse
 {
     extern const MultiplyFct     g_multiplyFct;
+    extern const GaussianPassFct g_gaussianPassFct;
     extern const GaussianBlurFct g_gaussianBlurFct;
 }
 
 namespace sse2
 {
     extern const MultiplyFct     g_multiplyFct;
+    extern const GaussianPassFct g_gaussianPassFct;
     extern const GaussianBlurFct g_gaussianBlurFct;
     extern const SumTileFct      g_sumTileFct;
 }
