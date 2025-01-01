@@ -409,11 +409,13 @@ static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* s
 
 static void gaussian_blur_fast(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius, GaussianPassFct gaussianPass) RMGR_NOEXCEPT
 {
-    const ptrdiff_t tmpStride   = TILE_MAX_HEIGHT + 2*GAUSSIAN_RADIUS; // Height, not width, because the result is transposed
-    const Float*    pass1Srce   = srce - GAUSSIAN_RADIUS*srceStride;
-    const int32_t   pass1Height = height + 2*GAUSSIAN_RADIUS;
+    const size_t  alignment   = 16;
+    const size_t  tmpWidth    = TILE_MAX_HEIGHT + 2*GAUSSIAN_RADIUS; // Height, not width, because the result is transposed
+    const size_t  tmpStride   = ALIGN_UP(tmpWidth, alignment/sizeof(Float));
+    const Float*  pass1Srce   = srce - GAUSSIAN_RADIUS*srceStride;
+    const int32_t pass1Height = height + 2*GAUSSIAN_RADIUS;
 
-    Float tmp[tmpStride * TILE_MAX_WIDTH];
+    alignas(alignment) Float tmp[tmpStride * TILE_MAX_WIDTH];
     gaussianPass(tmp, tmpStride, pass1Srce, srceStride, width,  pass1Height, kernel);
 
     const Float* pass2Srce = tmp + GAUSSIAN_RADIUS;
@@ -970,7 +972,8 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
     }
     if ((supportedImpls & (1 << IMPL_AVX)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_AVX))
     {
-        multiplyFct     = avx::g_multiplyFct;
+        multiplyFct     = sse::g_multiplyFct;
+        gaussianPassFct = avx::g_gaussianPassFct;
         gaussianBlurFct = avx::g_gaussianBlurFct;
         sumTileFct      = avx::g_sumTileFct;
     }

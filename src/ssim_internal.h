@@ -83,6 +83,7 @@ namespace sse2
 namespace avx
 {
     extern const MultiplyFct     g_multiplyFct;
+    extern const GaussianPassFct g_gaussianPassFct;
     extern const GaussianBlurFct g_gaussianBlurFct;
     extern const SumTileFct      g_sumTileFct;
 }

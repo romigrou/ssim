@@ -110,6 +110,155 @@ const MultiplyFct g_multiplyFct = multiply;
 
 
 //=================================================================================================
+// gaussian_pass()
+
+static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float /*kernel*/[]) RMGR_NOEXCEPT
+{
+    assert(reinterpret_cast<uintptr_t>(dest) % 16 == 0); // dest must be aligned on 16 bytes
+    assert(destStride % (16/sizeof(Float)) == 0);        // destStride be also be a multiple of 16 bytes
+
+    const Float k5 = Float(1.02838035672903061e-03);
+    const Float k4 = Float(7.59875820949673653e-03);
+    const Float k3 = Float(3.60007733106613159e-02);
+    const Float k2 = Float(1.09360694885253906e-01);
+    const Float k1 = Float(2.13005542755126953e-01);
+    const Float k0 = Float(2.66011744737625122e-01);
+
+    const Vector vk5 = VSET1(k5);
+    const Vector vk4 = VSET1(k4);
+    const Vector vk3 = VSET1(k3);
+    const Vector vk2 = VSET1(k2);
+    const Vector vk1 = VSET1(k1);
+    const Vector vk0 = VSET1(k0);
+
+    int32_t y = 0;
+    const int32_t yUnrolling = 4;
+    for (; y+yUnrolling <= height; y+=yUnrolling)
+    {
+        const Float* s0 = srce;
+        const Float* s1 = srce + srceStride;
+        const Float* s2 = srce + srceStride*2;
+        const Float* s3 = srce + srceStride*3;
+
+        // Main SIMD loop
+        // We always process 4 rows at a time, which for floats means in blocks of 8x4 because 8 rows
+        // would require too many registers (even worse in 32-bit x86 as there are only 8 AVX registers).
+        // The double implementation processes 4x4 blocks and, therefore, looks a lot like the SSE one.
+        ptrdiff_t x = 0;
+        for (; x+VEC_SIZE <= width; x+=VEC_SIZE)
+        {
+            #define ACC2(xi,yi)  VMUL(VADD(VLOADU(s##yi + x - xi), VLOADU(s##yi + x + xi)), vk##xi)
+            #define D_5(yi)      Vector d##yi = ACC2(5,yi)
+            #define D(xi,yi)     d##yi = VADD(d##yi, ACC2(xi,yi))
+            #define D_0(yi)      d##yi = VADD(d##yi, VMUL(VLOADU(s##yi+x), vk0))
+
+            // Compute Gaussian blur
+            D_5(0);  D_5(1);  D_5(2);  D_5(3);
+            D(4,0);  D(4,1);  D(4,2);  D(4,3);
+            D(3,0);  D(3,1);  D(3,2);  D(3,3);
+            D(2,0);  D(2,1);  D(2,2);  D(2,3);
+            D(1,0);  D(1,1);  D(1,2);  D(1,3);
+            D_0(0);  D_0(1);  D_0(2);  D_0(3);
+
+            // Tranpose and write
+#if RMGR_SSIM_USE_DOUBLE
+            const __m256d tmp0 = _mm256_shuffle_pd(d0, d1,  0);
+            const __m256d tmp1 = _mm256_shuffle_pd(d0, d1, 15);
+            const __m256d tmp2 = _mm256_shuffle_pd(d2, d3,  0);
+            const __m256d tmp3 = _mm256_shuffle_pd(d2, d3, 15);
+
+            _mm_store_pd(dest,   _mm256_castpd256_pd128(tmp0));
+            _mm_store_pd(dest+2, _mm256_castpd256_pd128(tmp2));   dest+=destStride;
+            _mm_store_pd(dest,   _mm256_castpd256_pd128(tmp1));
+            _mm_store_pd(dest+2, _mm256_castpd256_pd128(tmp3));   dest+=destStride;
+            _mm_store_pd(dest,   _mm256_extractf128_pd(tmp0,1));
+            _mm_store_pd(dest+2, _mm256_extractf128_pd(tmp2,1));  dest+=destStride;
+            _mm_store_pd(dest,   _mm256_extractf128_pd(tmp1,1));
+            _mm_store_pd(dest+2, _mm256_extractf128_pd(tmp3,1));  dest+=destStride;
+#else
+            const __m256 tmp0 = _mm256_shuffle_ps(d0, d1, 0x44);
+            const __m256 tmp2 = _mm256_shuffle_ps(d0, d1, 0xEE);
+            const __m256 tmp1 = _mm256_shuffle_ps(d2, d3, 0x44);
+            const __m256 tmp3 = _mm256_shuffle_ps(d2, d3, 0xEE);
+            d0 = _mm256_shuffle_ps(tmp0, tmp1, 0x88);
+            d1 = _mm256_shuffle_ps(tmp0, tmp1, 0xDD);
+            d2 = _mm256_shuffle_ps(tmp2, tmp3, 0x88);
+            d3 = _mm256_shuffle_ps(tmp2, tmp3, 0xDD);
+
+            _mm_store_ps(dest, _mm256_castps256_ps128(d0));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_castps256_ps128(d1));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_castps256_ps128(d2));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_castps256_ps128(d3));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d0,1));  dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d1,1));  dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d2,1));  dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d3,1));  dest+=destStride;
+#endif
+
+            #undef ACC2
+            #undef D_5
+            #undef D
+            #undef D_0
+        }
+
+        // Scalar epilogue for width
+        for (; x < width; ++x)
+        {
+            #define ACC2(xi,yi)  (s##yi[x-xi] + s##yi[x+xi]) * k##xi
+            #define D_5(yi)      Float d##yi = ACC2(5,yi)
+            #define D(xi,yi)     d##yi += ACC2(xi,yi)
+            #define D_0(yi)      d##yi += s##yi[x] * k0
+
+            D_5(0);  D_5(1);  D_5(2);  D_5(3);
+            D(4,0);  D(4,1);  D(4,2);  D(4,3);
+            D(3,0);  D(3,1);  D(3,2);  D(3,3);
+            D(2,0);  D(2,1);  D(2,2);  D(2,3);
+            D(1,0);  D(1,1);  D(1,2);  D(1,3);
+            D_0(0);  D_0(1);  D_0(2);  D_0(3);
+
+            dest[0] = d0;
+            dest[1] = d1;
+            dest[2] = d2;
+            dest[3] = d3;  dest += destStride;
+
+            #undef ACC2
+            #undef D_5
+            #undef D
+            #undef D_0
+        }
+
+        srce += srceStride * yUnrolling;
+        dest -= (destStride * width) - yUnrolling;
+    }
+
+    // Scalar epilogue for height
+    for (; y < height; ++y)
+    {
+        for (ptrdiff_t x=0; x < width; ++x)
+        {
+            Float d;
+            d  = k5 * (srce[x-5] + srce[x+5]);
+            d += k4 * (srce[x-4] + srce[x+4]);
+            d += k3 * (srce[x-3] + srce[x+3]);
+            d += k2 * (srce[x-2] + srce[x+2]);
+            d += k1 * (srce[x-1] + srce[x+1]);
+            d += k0 * srce[x];
+            *dest = d;
+            dest += destStride;
+        }
+
+        srce += srceStride;
+        dest -= (destStride * width) - 1;
+    }
+
+    _mm256_zeroupper();
+}
+
+
+const GaussianPassFct g_gaussianPassFct = gaussian_blur_pass;
+
+
+//=================================================================================================
 // gaussian_blur()
 
 static void gaussian_blur(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float kernel[], int radius) RMGR_NOEXCEPT

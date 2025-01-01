@@ -137,6 +137,9 @@ const MultiplyFct sse::g_multiplyFct  = multiply;
 
 static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float /*kernel*/[]) RMGR_NOEXCEPT
 {
+    assert(reinterpret_cast<uintptr_t>(dest) % 16 == 0); // dest must be aligned on 16 bytes
+    assert(destStride % (16/sizeof(Float)) == 0);        // destStride be also be a multiple of 16 bytes
+
     const Float k5 = Float(1.02838035672903061e-03);
     const Float k4 = Float(7.59875820949673653e-03);
     const Float k3 = Float(3.60007733106613159e-02);
