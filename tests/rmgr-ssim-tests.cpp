@@ -64,7 +64,7 @@ static const char* g_imagesDir = g_defaultImagesDir;
 #if defined(__SIZEOF_FLOAT128__) && 0
     typedef __float128 RefFloat;
     #define REF_TOLERANCE  DBL_EPSILON
-#elif DBL_MANT_DIG < LDBL_MANT_DIG && LDBL_MANT_DIG <= 64 && !RMGR_ARCH_IS_X86_64 // long double OK if no more than 80 bits (otherwise likely to be software)
+#elif DBL_MANT_DIG < LDBL_MANT_DIG && LDBL_MANT_DIG <= 64 // long double OK if no more than 80 bits (otherwise likely to be software)
     typedef long double RefFloat;
     #define REF_TOLERANCE  DBL_EPSILON
 #else
@@ -96,11 +96,11 @@ static uint64_t g_imageCount[IMPL_COUNT]     = {};
 static uint64_t g_pixelCount[IMPL_COUNT]     = {};
 
 #if RMGR_SSIM_USE_DOUBLE
-    static const double GLOBAL_TOLERANCE = 5e-7f;
-    static const double PIXEL_TOLERANCE  = 1e-5f;
+    static const double GLOBAL_TOLERANCE = 3e-8f;
+    static const double PIXEL_TOLERANCE  = 3e-8f;
 #else
-    static const double GLOBAL_TOLERANCE = 4e-6f;
-    static const double PIXEL_TOLERANCE  = 1e-3f;
+    static const double GLOBAL_TOLERANCE = 1.2e-6f;
+    static const double PIXEL_TOLERANCE  = 5.1e-4f;
 #endif
 
 
