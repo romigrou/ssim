@@ -483,7 +483,14 @@ static void test_bbb257(rmgr::ssim::Implementation impl, bool openmp, bool useHe
 #define TEST_AUTO(name)     TEST_IMPL(name, auto,    IMPL_AUTO)
 #define TEST_GENERIC(name)  TEST_IMPL(name, generic, IMPL_GENERIC)
 
-#if RMGR_ARCH_IS_X86_ANY
+#if RMGR_ARCH_IS_X86_ANY && RMGR_SSIM_USE_DOUBLE
+    // SSE does not support doubles
+    #define TEST_X86(name)                 \
+        TEST_IMPL(name, sse2,   IMPL_SSE2) \
+        TEST_IMPL(name, avx,    IMPL_AVX)  \
+        TEST_IMPL(name, fma,    IMPL_FMA)  \
+        TEST_IMPL(name, avx512, IMPL_AVX512)
+#elif RMGR_ARCH_IS_X86_ANY
     #define TEST_X86(name)                 \
         TEST_IMPL(name, sse,    IMPL_SSE)  \
         TEST_IMPL(name, sse2,   IMPL_SSE2) \
