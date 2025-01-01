@@ -92,6 +92,7 @@ namespace fma
 {
     using avx::g_multiplyFct;
     using avx::g_sumTileFct;
+    extern const GaussianPassFct g_gaussianPassFct;
     extern const GaussianBlurFct g_gaussianBlurFct;
 }
 

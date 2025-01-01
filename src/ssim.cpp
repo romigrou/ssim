@@ -980,6 +980,7 @@ unsigned select_impl(Implementation desiredImpl) RMGR_NOEXCEPT
     if ((supportedImpls & (1 << IMPL_FMA)) && (desiredImpl==IMPL_AUTO || desiredImpl==IMPL_FMA))
     {
         multiplyFct     = fma::g_multiplyFct;
+        gaussianPassFct = fma::g_gaussianPassFct;
         gaussianBlurFct = fma::g_gaussianBlurFct;
         sumTileFct      = fma::g_sumTileFct;
     }

@@ -100,6 +100,185 @@ namespace rmgr { namespace ssim { namespace fma
     #endif
 #endif
 
+#if RMGR_SSIM_USE_DOUBLE
+    typedef __m128d Scalar;
+    #define SET     _mm_set_sd
+    #define LOAD    _mm_load_sd
+    #define STORE   _mm_store_sd
+    #define MUL     _mm_mul_sd
+    #define FMADD   _mm_fmadd_sd
+#else
+    typedef __m128  Scalar;
+    #define SET     _mm_set_ss
+    #define LOAD    _mm_load_ss
+    #define STORE   _mm_store_ss
+    #define MUL     _mm_mul_ss
+    #define FMADD   _mm_fmadd_ss
+#endif
+
+
+//=================================================================================================
+// gaussian_pass()
+
+static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* srce, ptrdiff_t srceStride, int32_t width, int32_t height, const Float /*kernel*/[]) RMGR_NOEXCEPT
+{
+    assert(reinterpret_cast<uintptr_t>(dest) % 16 == 0); // dest must be aligned on 16 bytes
+    assert(destStride % (16/sizeof(Float)) == 0);        // destStride be also be a multiple of 16 bytes
+
+    const Float k5 = Float(1.028380084479109868e-03);
+    const Float k4 = Float(7.598758135239185030e-03);
+    const Float k3 = Float(3.600077212843082186e-02);
+    const Float k2 = Float(1.093606895097000153e-01);
+    const Float k1 = Float(2.130055377112536896e-01);
+    const Float k0 = Float(2.660117248617943631e-01);
+
+    const Vector vk5 = VSET1(k5);
+    const Vector vk4 = VSET1(k4);
+    const Vector vk3 = VSET1(k3);
+    const Vector vk2 = VSET1(k2);
+    const Vector vk1 = VSET1(k1);
+    const Vector vk0 = VSET1(k0);
+
+    const Scalar sk5 = SET(k5);
+    const Scalar sk4 = SET(k4);
+    const Scalar sk3 = SET(k3);
+    const Scalar sk2 = SET(k2);
+    const Scalar sk1 = SET(k1);
+    const Scalar sk0 = SET(k0);
+
+    int32_t y = 0;
+    const int32_t yUnrolling = 4;
+    for (; y+yUnrolling <= height; y+=yUnrolling)
+    {
+        const Float* s0 = srce;
+        const Float* s1 = srce + srceStride;
+        const Float* s2 = srce + srceStride*2;
+        const Float* s3 = srce + srceStride*3;
+
+        // Main SIMD loop
+        // We always process 4 rows at a time, which for floats means in blocks of 8x4 because 8 rows
+        // would require too many registers (even worse in 32-bit x86 as there are only 8 AVX registers).
+        // The double implementation processes 4x4 blocks and, therefore, looks a lot like the SSE one.
+        ptrdiff_t x = 0;
+        for (; x+VEC_SIZE <= width; x+=VEC_SIZE)
+        {
+            #define D_5(yi)   Vector d##yi = VMUL(VLOADU(s##yi + x - 5), vk5);       \
+                              d##yi = VFMADD(VLOADU(s##yi + x + 5),  vk5,    d##yi)
+            #define D(xi,yi)  d##yi = VFMADD(VLOADU(s##yi + x - xi), vk##xi, d##yi); \
+                              d##yi = VFMADD(VLOADU(s##yi + x + xi), vk##xi, d##yi)
+            #define D_0(yi)   d##yi = VFMADD(VLOADU(s##yi+x), vk0, d##yi)
+
+            // Compute Gaussian blur
+            D_5(0); D_5(1);  D_5(2);  D_5(3);
+            D(4,0);  D(4,1);  D(4,2);  D(4,3);
+            D(3,0);  D(3,1);  D(3,2);  D(3,3);
+            D(2,0);  D(2,1);  D(2,2);  D(2,3);
+            D(1,0);  D(1,1);  D(1,2);  D(1,3);
+            D_0(0);  D_0(1);  D_0(2);  D_0(3);
+
+            // Tranpose and write
+#if RMGR_SSIM_USE_DOUBLE
+            const __m256d tmp0 = _mm256_shuffle_pd(d0, d1,  0);
+            const __m256d tmp1 = _mm256_shuffle_pd(d0, d1, 15);
+            const __m256d tmp2 = _mm256_shuffle_pd(d2, d3,  0);
+            const __m256d tmp3 = _mm256_shuffle_pd(d2, d3, 15);
+
+            _mm_store_pd(dest,   _mm256_castpd256_pd128(tmp0));
+            _mm_store_pd(dest+2, _mm256_castpd256_pd128(tmp2));   dest+=destStride;
+            _mm_store_pd(dest,   _mm256_castpd256_pd128(tmp1));
+            _mm_store_pd(dest+2, _mm256_castpd256_pd128(tmp3));   dest+=destStride;
+            _mm_store_pd(dest,   _mm256_extractf128_pd(tmp0,1));
+            _mm_store_pd(dest+2, _mm256_extractf128_pd(tmp2,1));  dest+=destStride;
+            _mm_store_pd(dest,   _mm256_extractf128_pd(tmp1,1));
+            _mm_store_pd(dest+2, _mm256_extractf128_pd(tmp3,1));  dest+=destStride;
+#else
+            const __m256 tmp0 = _mm256_shuffle_ps(d0, d1, 0x44);
+            const __m256 tmp2 = _mm256_shuffle_ps(d0, d1, 0xEE);
+            const __m256 tmp1 = _mm256_shuffle_ps(d2, d3, 0x44);
+            const __m256 tmp3 = _mm256_shuffle_ps(d2, d3, 0xEE);
+            d0 = _mm256_shuffle_ps(tmp0, tmp1, 0x88);
+            d1 = _mm256_shuffle_ps(tmp0, tmp1, 0xDD);
+            d2 = _mm256_shuffle_ps(tmp2, tmp3, 0x88);
+            d3 = _mm256_shuffle_ps(tmp2, tmp3, 0xDD);
+
+            _mm_store_ps(dest, _mm256_castps256_ps128(d0));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_castps256_ps128(d1));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_castps256_ps128(d2));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_castps256_ps128(d3));   dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d0,1));  dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d1,1));  dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d2,1));  dest+=destStride;
+            _mm_store_ps(dest, _mm256_extractf128_ps(d3,1));  dest+=destStride;
+#endif
+
+            #undef D_5
+            #undef D
+            #undef D_0
+        }
+
+        // Scalar epilogue for width
+        for (; x < width; ++x)
+        {
+            #define D_5(yi)   Scalar d##yi = MUL(LOAD(s##yi + x - 5), sk5);       \
+                              d##yi = FMADD(LOAD(s##yi + x + 5),  sk5,    d##yi)
+            #define D(xi,yi)  d##yi = FMADD(LOAD(s##yi + x - xi), sk##xi, d##yi); \
+                              d##yi = FMADD(LOAD(s##yi + x + xi), sk##xi, d##yi)
+            #define D_0(yi)   d##yi = FMADD(LOAD(s##yi+x), sk0, d##yi)
+
+            D_5(0);  D_5(1);  D_5(2);  D_5(3);
+            D(4,0);  D(4,1);  D(4,2);  D(4,3);
+            D(3,0);  D(3,1);  D(3,2);  D(3,3);
+            D(2,0);  D(2,1);  D(2,2);  D(2,3);
+            D(1,0);  D(1,1);  D(1,2);  D(1,3);
+            D_0(0);  D_0(1);  D_0(2);  D_0(3);
+
+            STORE(dest+0, d0);
+            STORE(dest+1, d1);
+            STORE(dest+2, d2);
+            STORE(dest+3, d3);
+            dest += destStride;
+
+            #undef D_5
+            #undef D
+            #undef D_0
+        }
+
+        srce += srceStride * yUnrolling;
+        dest -= (destStride * width) - yUnrolling;
+    }
+
+    // Scalar epilogue for height
+    for (; y < height; ++y)
+    {
+        for (ptrdiff_t x=0; x < width; ++x)
+        {
+            Scalar d;
+            d = MUL(  LOAD(srce+x-5), sk5);
+            d = FMADD(LOAD(srce+x+5), sk5, d);
+            d = FMADD(LOAD(srce+x-4), sk4, d);
+            d = FMADD(LOAD(srce+x+4), sk4, d);
+            d = FMADD(LOAD(srce+x-3), sk3, d);
+            d = FMADD(LOAD(srce+x+3), sk3, d);
+            d = FMADD(LOAD(srce+x-2), sk2, d);
+            d = FMADD(LOAD(srce+x+2), sk2, d);
+            d = FMADD(LOAD(srce+x-1), sk1, d);
+            d = FMADD(LOAD(srce+x+1), sk1, d);
+            d = FMADD(LOAD(srce+x),   sk0, d);
+            STORE(dest, d);
+            dest += destStride;
+        }
+
+        srce += srceStride;
+        dest -= (destStride * width) - 1;
+    }
+
+    _mm256_zeroupper();
+}
+
+
+const GaussianPassFct g_gaussianPassFct = gaussian_blur_pass;
+
+
 //=================================================================================================
 // gaussian_blur()
 
