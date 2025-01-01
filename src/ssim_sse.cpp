@@ -140,12 +140,12 @@ static void gaussian_blur_pass(Float* dest, ptrdiff_t destStride, const Float* s
     assert(reinterpret_cast<uintptr_t>(dest) % 16 == 0); // dest must be aligned on 16 bytes
     assert(destStride % (16/sizeof(Float)) == 0);        // destStride be also be a multiple of 16 bytes
 
-    const Float k5 = Float(1.02838035672903061e-03);
-    const Float k4 = Float(7.59875820949673653e-03);
-    const Float k3 = Float(3.60007733106613159e-02);
-    const Float k2 = Float(1.09360694885253906e-01);
-    const Float k1 = Float(2.13005542755126953e-01);
-    const Float k0 = Float(2.66011744737625122e-01);
+    const Float k5 = Float(1.028380084479109868e-03);
+    const Float k4 = Float(7.598758135239185030e-03);
+    const Float k3 = Float(3.600077212843082186e-02);
+    const Float k2 = Float(1.093606895097000153e-01);
+    const Float k1 = Float(2.130055377112536896e-01);
+    const Float k0 = Float(2.660117248617943631e-01);
 
     const Vector vk5 = VSET1(k5);
     const Vector vk4 = VSET1(k4);
